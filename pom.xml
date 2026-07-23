@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.4.0</version>
+		<relativePath/>
+	</parent>
+
+	<groupId>com.xdl</groupId>
+	<artifactId>blogs</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<packaging>pom</packaging>
+
+	<name>blogs</name>
+	<description>知识分享博客系统 - 多模块主工程</description>
+
+	<!-- 子模块列表 -->
+	<modules>
+		<module>blogs-common</module>
+		<module>blogs-model</module>
+		<module>blogs-security</module>
+		<module>blogs-core</module>
+		<module>blogs-admin</module>
+	</modules>
+
+	<properties>
+		<java.version>21</java.version>
+		<blogs.version>0.0.1-SNAPSHOT</blogs.version>
+		<mybatis-plus.version>3.5.9</mybatis-plus.version>
+		<jjwt.version>0.12.6</jjwt.version>
+	</properties>
+
+	<!-- 依赖版本统一管理 -->
+	<dependencyManagement>
+		<dependencies>
+			<!-- 本地子模块依赖 -->
+			<dependency>
+				<groupId>com.xdl</groupId>
+				<artifactId>blogs-common</artifactId>
+				<version>${blogs.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.xdl</groupId>
+				<artifactId>blogs-model</artifactId>
+				<version>${blogs.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.xdl</groupId>
+				<artifactId>blogs-security</artifactId>
+				<version>${blogs.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.xdl</groupId>
+				<artifactId>blogs-core</artifactId>
+				<version>${blogs.version}</version>
+			</dependency>
+
+			<!-- MyBatis-Plus -->
+			<dependency>
+				<groupId>com.baomidou</groupId>
+				<artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+				<version>${mybatis-plus.version}</version>
+			</dependency>
+
+			<!-- JWT -->
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-api</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-impl</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>io.jsonwebtoken</groupId>
+				<artifactId>jjwt-jackson</artifactId>
+				<version>${jjwt.version}</version>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
+</project>

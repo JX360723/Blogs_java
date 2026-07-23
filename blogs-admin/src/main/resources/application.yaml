@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: blogs
+  profiles:
+    active: dev # 激活开发环境配置 (对应 application-dev.yml)
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开发环境控制台打印 SQL
+    map-underscore-to-camel-case: true # 开启下划线转驼峰
+  global-config:
+    db-config:
+      logic-delete-field: deleted # 逻辑删除全局字段
+      logic-delete-value: 1
+      logic-not-delete-value: 0
