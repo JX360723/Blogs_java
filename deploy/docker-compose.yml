@@ -1,0 +1,90 @@
+# 博客系统 Docker Compose 骨架（本地/服务器整栈）
+# 用途：MySQL 8.0 + 后端(Spring Boot) + 前端(Vite 构建/Nginx) 单机整栈运行
+# 说明：本文件为**骨架草案**，后端/前端 Dockerfile 与镜像构建待 claude/codex 就位后验证。
+
+version: "3.9"
+
+services:
+  # ---------- MySQL 8.0（持久化） ----------
+  mysql:
+    image: mysql:8.0
+    container_name: blogs-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 可选：挂载初始化 SQL（由 claude 提供迁移脚本后启用）
+      # - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------- 后端服务（Spring Boot, blogs-admin） ----------
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend/Dockerfile
+    container_name: blogs-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # 覆盖 application-dev.yml 中的 localhost 指向容器服务名
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      # 可选 Redis（MVP 不强制依赖，见 README）
+      # SPRING_DATA_REDIS_HOST: redis
+      # SPRING_DATA_REDIS_PORT: 6379
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  # ---------- 前端（Vite 构建 → Nginx 托管 + /api 反代） ----------
+  frontend:
+    build:
+      context: ..
+      dockerfile: deploy/frontend/Dockerfile
+    container_name: blogs-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
+  # ---------- Redis（可选，默认不启动） ----------
+  # 当前 MVP 不强制依赖 Redis。若后端阶段1审计确认需要，取消注释并按需配置。
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: blogs-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${REDIS_PORT:-6379}:6379"
+  #   volumes:
+  #     - redis_data:/data
+
+volumes:
+  mysql_data:
+    driver: local
+  # redis_data:
+  #   driver: local
