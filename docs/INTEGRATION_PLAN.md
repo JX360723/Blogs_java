@@ -2,6 +2,8 @@
 
 > **状态：草案**。依赖 `docs/API_CONTRACT.md`（接口契约草案）。契约冻结前，本方案用于指导本地联调顺序与验收；契约冻结后按冻结版执行。
 > 适用阶段：阶段 0 审计完成后、前端 mock 替换为真实接口的联调窗口。
+>
+> **决策记录（2026-10-14，负责人已确认）**：认证采用无状态 JWT；标签纳入 MVP（计划中-阶段3，排在文章/分类之后）；站点设置首版不支持（走前端配置）；Redis MVP 不强制依赖（`application-dev.yml` 的 Redis 依赖是否放宽由 claude 审计确认，K1）。
 
 ---
 
@@ -42,7 +44,7 @@ MySQL 8.0 (:3306, 库 blogs_db)
 | 前端 Vite dev | `5173` | `npm run dev`；通过 proxy 访问后端 |
 | 后端 Spring Boot | `8080` | 已确认 `application.yaml` 端口 8080 |
 | MySQL | `3306` | 本地或 Docker；dev 配置库名 `blogs_db` |
-| Redis | `6379` | **可选**：dev 配置已写 Redis，但 MVP 不强制依赖；若后端启动报 Redis 连接错误，按 4.1 节处理 |
+| Redis | `6379` | **可选**：MVP 不强制依赖（已决策）；`application-dev.yml` 的 Redis 依赖是否放宽由 claude 审计确认（K1） |
 | 生产（Docker Compose） | 前端 `80` / 后端 `8080` / MySQL `3306` | 见 `deploy/` |
 
 ---
@@ -80,7 +82,7 @@ cd Blogs_java
 - 访问健康检查端点（见第 6 节）返回正常；
 - 控制台无异常堆栈、无 SQL 错误。
 
-> 注意：`application-dev.yml` 当前配置 `localhost:3306` + `root/123456`，且已配置 Redis。若本地无 Redis，后端启动可能因 Redis 连接失败而退出——这是**已知待确认项**（见第 9 节 K1），联调前由 claude 确认是否移除/放宽 Redis 依赖。
+> 注意：`application-dev.yml` 当前配置 `localhost:3306` + `root/123456`，且已配置 Redis。已决策 MVP **不强制依赖 Redis**；若本地无 Redis 导致后端启动失败，由 claude 审计确认是否放宽/移除 `application-dev.yml` 的 Redis 依赖（见第 9 节 K1）。
 
 ### 步骤 2：契约核对（claude 审计后执行）
 
@@ -89,8 +91,8 @@ cd Blogs_java
 - [ ] 逐条核对 6.1/6.2 接口路径、方法、请求/响应字段是否一致；
 - [ ] 核对统一响应包络与分页字段；
 - [ ] 核对错误码（401/403/404/400/500）；
-- [ ] 核对认证方案（JWT vs Session，C1）；
-- [ ] 核对标签/站点设置是否实现（C2/C3）；
+- [ ] 核对认证实现与契约一致（已决策：无状态 JWT）；
+- [ ] 核对标签实现范围（计划中-阶段3）与站点设置（MVP 不支持，前端静态配置）；
 - [ ] 差异登记到 `docs/KNOWN_ISSUES.md`，契约状态由「待审计确认」改为「已冻结」。
 
 ### 步骤 3：前端替换 mock（codex 执行）
@@ -99,7 +101,7 @@ cd Blogs_java
 - 统一在 axios 拦截器处理 `Result<T>` 包络与错误码（401 跳登录、403 提示、404 提示、400 展示 message）；
 - 先替换「公开文章列表/详情」「分类列表」等只读链路，验证 proxy 通；
 - 再替换「管理员登录」「文章 CRUD」链路，验证鉴权；
-- 未冻结/阻塞接口（标签、站点设置）前端隐藏入口或保留 mock 并标注。
+- 未冻结接口保留 mock 并标注；标签接口前端**保留入口**（计划中-阶段3，后端实现后替换）；站点设置首版不做（前端静态配置，见决策记录）。
 
 ### 步骤 4：主链路验证
 
@@ -227,7 +229,7 @@ curl -s http://localhost:8080/actuator/health   # 期望 {"status":"UP"}
 
 | 编号 | 事项 | 负责方 | 说明 |
 | --- | --- | --- | --- |
-| K1 | Redis 依赖 | claude | `application-dev.yml` 已配 Redis；MVP 不强制依赖，审计后确认是否注释/移除 |
+| K1 | Redis 依赖 | claude | 已决策：MVP 不强制依赖（compose 保持可选注释）；`application-dev.yml` 的 Redis 依赖是否放宽，登记给 claude 审计确认 |
 | K2 | 数据库迁移/初始化脚本缺失 | claude | 仓库当前无 SQL/迁移；首启需提供建表与首个管理员初始化方式 |
 | K3 | 后端无 Controller | claude | 阶段 1 实现接口前，契约冻结依赖审计结论 |
 | K4 | 前端工程就位 | codex | Vite 脚手架完成后按 5.2 proxy 约定配置 |
@@ -242,4 +244,4 @@ curl -s http://localhost:8080/actuator/health   # 期望 {"status":"UP"}
 - 端口/环境变量通过 `deploy/.env`（由 `.env.example` 复制）配置，真实密钥不入库。
 
 ---
-文档版本：0.1（草案）｜维护人：编程专家（前后端联调）｜创建日期：2026-10-14
+文档版本：0.2（草案，含 2026-10-14 决策）｜维护人：编程专家（前后端联调）｜创建日期：2026-10-14
