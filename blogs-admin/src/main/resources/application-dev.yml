@@ -12,3 +12,10 @@ spring:
       host: localhost
       port: 6379
       database: 0
+
+  # 开发环境自动执行建表脚本（幂等：CREATE TABLE IF NOT EXISTS）
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+      encoding: UTF-8

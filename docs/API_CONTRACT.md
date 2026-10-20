@@ -1,3 +1,13 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191110102MACQD9K64018705
+    ProduceID: 3137366841633914_0-drive/235678159419209852/Blogs_java/docs/API_CONTRACT.md
+    ReservedCode1: ""
+    ContentPropagator: 001191110102MACQD9K64028705
+    PropagateID: 3137366841633914#1792474028648
+    ReservedCode2: ""
+---
 # 博客系统 API 接口契约（草案）
 
 > **文件状态：草案（未冻结）**
@@ -111,9 +121,9 @@
 - **登录**：`POST /api/v1/auth/login` 成功后返回 JWT `token`。
 - **携带方式**：`Authorization: Bearer <token>`（无状态 JWT，2026-10-14 已决策）。
 - **管理端接口**：除登录外，所有 `/api/v1/admin/**` 均需有效 token；服务端校验角色为管理员，否则返回 `403`。
-- **登出/刷新**：暂按不实现处理（MVP 单管理员场景）；token 有效期、存储与续期策略**待审计确认**。
+- **登出/刷新**：MVP 不实现（单管理员、无状态）；token 有效期 24 小时，前端本地丢弃即登出。登录接口细则见 6.2.1（2026-10-20 已冻结）。
 
-> 实现说明：当前后端仅引入 `jjwt` 依赖，无登录/认证实现；登录接口路径与字段仍待阶段 0 审计后与真实实现对齐。
+> 实现状态（2026-10-20 核实）：后端仅在 blogs-common 引入 jjwt 0.12.6 依赖，无 admin_user 实体、无 Controller、无认证实现；登录功能由本地 codex 线按 6.2.1 冻结规范新建。
 
 ---
 
@@ -258,49 +268,74 @@
 
 > 所有 `/api/v1/admin/**` 未认证返回 `401`，非管理员返回 `403`。未特别标注的条目状态均为「待审计确认」。
 
-#### 6.2.1 管理员登录
+#### 6.2.1 管理员登录（已冻结 2026-10-20，前后端对接以此为准）
 
 | 项 | 值 |
 | --- | --- |
 | 方法/路径 | `POST /api/v1/auth/login` |
-| 权限 | 公开（但仅限管理员账号；MVP 不做开放注册） |
-| 说明 | 管理员登录，成功返回 JWT token 与管理员基本信息（认证方案已决策：无状态 JWT） |
-| 状态 | 待审计确认（认证方案已决策，接口实现待审计） |
+| 权限 | 公开（仅限管理员账号；MVP 不做注册/找回） |
+| Content-Type | `application/json` |
 
 **请求体**
 
+| 字段 | 类型 | 必填 | 校验 |
+| --- | --- | --- | --- |
+| `username` | string | 是 | 长度 3–50，去除首尾空格后非空 |
+| `password` | string | 是 | 长度 6–64，不去空格 |
+
 ```json
-{
-  "username": "admin",
-  "password": "raw_password"
-}
+{ "username": "admin", "password": "raw_password" }
 ```
 
-**响应 `data`**
+**成功响应**：HTTP 200，`Result<T>` 中 `code=200`，`data`：
 
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 86400,
   "userInfo": {
     "id": 1,
     "username": "admin",
     "nickname": "系统管理员",
-    "avatar": "https://...",
+    "avatar": "https://.../avatar.png",
     "role": "ADMIN"
   }
 }
 ```
 
-> 登录失败（用户名不存在/密码错误）统一返回 `400` 或 `401`（**待审计确认**，建议 `401` 且 message 不区分“用户不存在/密码错误”，避免账号枚举）；密码必须服务端哈希存储（bcrypt/Argon2），禁止明文。
+**失败响应（HTTP 状态码与业务 code 保持一致）**
 
-#### 6.2.2 当前管理员信息
+| 场景 | HTTP/code | message |
+| --- | --- | --- |
+| 用户名或密码错误、用户不存在 | 401 | `用户名或密码错误`（统一文案，不区分，防账号枚举） |
+| 账号被禁用 | 403 | `账号已被禁用` |
+| 参数缺失/超长/格式非法 | 400 | 具体字段错误，如 `密码长度不能少于6位` |
+
+**JWT 规则（冻结）**
+
+- 算法 HS256；密钥由后端配置（环境变量 `JWT_SECRET`，不少于 32 字节），禁止入库/入仓/进日志。
+- 有效期 **24 小时**（`expiresIn=86400` 秒）；MVP 不做刷新 token、不做服务端登出（前端丢弃本地 token 即登出）。
+- claims：`sub`=管理员 id、`username`、`role=ADMIN`、`iat`、`exp`。
+- 后续请求头：`Authorization: Bearer <token>`。
+- 密码服务端 **bcrypt** 哈希存储，禁止明文、禁止可逆加密。
+
+**后端落地要求（codex 本地实现）**
+
+1. 表 `admin_user`：`id BIGINT PK AUTO_INCREMENT`、`username VARCHAR(50) UNIQUE NOT NULL`、`password VARCHAR(100) NOT NULL`（bcrypt）、`nickname VARCHAR(50)`、`avatar VARCHAR(255)`、`role VARCHAR(20) DEFAULT 'ADMIN'`、`status TINYINT DEFAULT 1`（1启用/0禁用）、`created_at`、`updated_at`、`deleted TINYINT DEFAULT 0`。
+2. 首个管理员初始化（K2）：提供 `schema.sql` + `data.sql`（或 Flyway/Liquibase），初始账号建议 `admin`，**初始密码通过环境变量 `ADMIN_INIT_PASSWORD` 注入**，首次构建时用 bcrypt 哈希写入；不硬编码密码。
+3. 登录校验顺序：查用户（含 deleted=0、status=1）→ bcrypt 比对 → 禁用返回 403 → 成功签发 token。
+
+#### 6.2.2 当前管理员信息（已定稿）
 
 | 项 | 值 |
 | --- | --- |
 | 方法/路径 | `GET /api/v1/auth/me` |
-| 权限 | 需登录 |
-| 说明 | 获取当前登录管理员信息（用于刷新用户态、判断登录态） |
-| 状态 | 待审计确认（可选接口，前端可仅依赖本地 token 判断） |
+| 权限 | 需登录（有效 JWT） |
+| 成功 | 200，`data` 为 userInfo（同登录响应中的 userInfo 结构，不含密码） |
+| 失败 | 401 未登录/token 失效 |
+
+用途：前端刷新页面后用本地 token 恢复登录态；后端必须实现。
 
 #### 6.2.3 文章管理 CRUD
 
@@ -487,3 +522,7 @@
 
 ---
 文档版本：0.2（草案，含 2026-10-14 决策）｜维护人：编程专家（前后端联调）｜创建日期：2026-10-14
+
+---
+
+> 本内容由 Coze AI 生成，请遵循相关法律法规及《人工智能生成合成内容标识办法》使用与传播。
