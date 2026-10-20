@@ -7,11 +7,11 @@
           <el-icon><Document /></el-icon>
           <span>文章管理</span>
         </el-menu-item>
-        <!-- 标签为阶段3，不做；分类管理 MVP 有余力再做，届时放开 -->
-        <!-- <el-menu-item index="/admin/categories">
+        <el-menu-item index="/admin/categories">
           <el-icon><FolderOpened /></el-icon>
           <span>分类管理</span>
-        </el-menu-item> -->
+        </el-menu-item>
+        <!-- 标签为阶段3，不做 -->
       </el-menu>
     </el-aside>
 
@@ -42,7 +42,7 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, ArrowDown } from '@element-plus/icons-vue'
+import { Document, FolderOpened, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()

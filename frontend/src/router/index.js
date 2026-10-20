@@ -31,14 +31,13 @@ const routes = [
         name: 'AdminArticleList',
         component: () => import('../views/admin/ArticleManage.vue'),
         meta: { requiresAuth: true }
+      },
+      {
+        path: 'categories',
+        name: 'AdminCategoryList',
+        component: () => import('../views/admin/CategoryManage.vue'),
+        meta: { requiresAuth: true }
       }
-      // 分类管理：MVP 有余力再做（标签为阶段3，不做）。开启时取消下行注释并创建对应视图。
-      // {
-      //   path: 'categories',
-      //   name: 'AdminCategoryList',
-      //   component: () => import('../views/admin/CategoryManage.vue'),
-      //   meta: { requiresAuth: true }
-      // }
     ]
   },
   // ---- 404 ----
