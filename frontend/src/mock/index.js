@@ -3,7 +3,7 @@
 //
 // 15:00 切真实接口：只需把 USE_MOCK 置为 false（.env.local 里 VITE_USE_MOCK=false），
 // API 层零改动，请求将直接走 vite proxy → http://localhost:8080。
-import { mockArticles, mockCategories, mockAdmin } from './data.js'
+import { mockArticles, mockCategories, mockAdmin, mockAdminDisabled } from './data.js'
 
 // 默认开启 mock；可用 VITE_USE_MOCK=false 关闭（node 冒烟测试环境无 import.meta.env 时按开启处理）
 export const USE_MOCK = (import.meta.env && import.meta.env.VITE_USE_MOCK) !== 'false'
@@ -105,16 +105,33 @@ route('GET', /^\/articles\/(\d+)$/, (config, [id]) => {
 // 公开：分类列表
 route('GET', /^\/categories$/, () => ok([...mockCategories].sort((a, b) => a.sortOrder - b.sortOrder)))
 
-// 管理端：登录（返回 token + 管理员信息；MVP 用无状态 JWT，mock 用占位 token）
+// 管理端：登录（对齐 API_CONTRACT.md 6.2.1 冻结规范 2026-10-20）
+// 成功 data：{ token, tokenType:'Bearer', expiresIn:86400, userInfo }
+// 失败：401 用户名或密码错误（统一文案）/ 403 账号已被禁用 / 400 参数校验
 route('POST', /^\/auth\/login$/, (config) => {
   const body = parseBody(config)
-  if (body.username === mockAdmin.username && body.password === mockAdmin.password) {
-    return ok({
-      token: `mock-jwt-token-${Date.now()}`,
-      userInfo: { ...mockAdmin.userInfo }
-    })
+  const username = typeof body.username === 'string' ? body.username.trim() : ''
+  const password = typeof body.password === 'string' ? body.password : ''
+
+  // 参数校验（对齐契约：username 3-50 去空格非空；password 6-64 不去空格）→ 400
+  if (!username || username.length < 3 || username.length > 50) {
+    return fail(400, '用户名长度需为 3-50 位')
   }
-  return fail(400, '用户名或密码错误')
+  if (!password || password.length < 6 || password.length > 64) {
+    return fail(400, '密码长度不能少于6位')
+  }
+
+  const user = [mockAdmin, mockAdminDisabled].find((u) => u.username === username)
+  if (!user) return fail(401, '用户名或密码错误')
+  if (user.status === 0) return fail(403, '账号已被禁用')
+  if (user.password !== password) return fail(401, '用户名或密码错误')
+
+  return ok({
+    token: `mock-jwt-token-${Date.now()}`,
+    tokenType: 'Bearer',
+    expiresIn: 86400,
+    userInfo: { ...user.userInfo }
+  })
 })
 
 // 管理端：当前登录用户信息

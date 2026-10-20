@@ -57,7 +57,7 @@ service.interceptors.response.use(
     if (status === 401) {
       handleUnauthorized()
     } else if (status === 403) {
-      ElMessage.error('无权限执行该操作')
+      ElMessage.error('无权限或账号已被禁用')
     } else if (status === 404) {
       ElMessage.error(error.response?.data?.message || '资源不存在')
     } else if (status === 400) {

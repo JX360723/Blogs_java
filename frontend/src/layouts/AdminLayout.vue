@@ -51,6 +51,11 @@ const authStore = useAuthStore()
 
 const activeMenu = computed(() => route.path)
 
+// 刷新页面后用本地 token 调 GET /api/v1/auth/me 恢复登录态（契约 6.2.2）
+onMounted(() => {
+  authStore.fetchMe()
+})
+
 async function onCommand(command) {
   if (command === 'logout') {
     try {

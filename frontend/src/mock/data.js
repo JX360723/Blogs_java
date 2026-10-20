@@ -39,9 +39,18 @@ export const mockArticles = [
   makeArticle(7, '已下架的历史文章', 2, 2, { viewCount: 8 })
 ]
 
-// 管理员账号（mock 专用，非真实凭证；真实登录由后端实现）
+// 管理员账号（mock 专用，非真实凭证；真实登录由后端实现，初始密码经 ADMIN_INIT_PASSWORD 注入）
 export const mockAdmin = {
   username: 'admin',
   password: 'admin123',
-  userInfo: { id: 1, username: 'admin', nickname: '站长', avatar: '', role: 'ADMIN' }
+  status: 1, // 1启用/0禁用
+  userInfo: { id: 1, username: 'admin', nickname: '系统管理员', avatar: '', role: 'ADMIN' }
+}
+
+// 禁用账号（mock 专用，演示登录 403 场景）
+export const mockAdminDisabled = {
+  username: 'disabled',
+  password: 'admin123',
+  status: 0,
+  userInfo: { id: 2, username: 'disabled', nickname: '已禁用账号', avatar: '', role: 'ADMIN' }
 }
