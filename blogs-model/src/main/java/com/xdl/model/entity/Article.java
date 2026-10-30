@@ -27,6 +27,31 @@ public class Article implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /**
+     * 状态：草稿（仅管理端可见）
+     */
+    public static final Integer STATUS_DRAFT = 0;
+
+    /**
+     * 状态：已发布（公开可见）
+     */
+    public static final Integer STATUS_PUBLISHED = 1;
+
+    /**
+     * 状态：已下架（仅管理端可见）
+     */
+    public static final Integer STATUS_OFFLINE = 2;
+
+    /**
+     * 是否置顶：否
+     */
+    public static final Integer NOT_TOP = 0;
+
+    /**
+     * 是否置顶：是
+     */
+    public static final Integer TOP = 1;
+
+    /**
      * 文章主键ID
      */
     @TableId(type = IdType.AUTO)

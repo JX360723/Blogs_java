@@ -67,6 +67,13 @@
 				<version>${mybatis-plus.version}</version>
 			</dependency>
 
+			<!-- MyBatis-Plus JSqlParser 支持：3.5.9 起从 extension 拆出，分页插件（PaginationInnerInterceptor）必需 -->
+			<dependency>
+				<groupId>com.baomidou</groupId>
+				<artifactId>mybatis-plus-jsqlparser</artifactId>
+				<version>${mybatis-plus.version}</version>
+			</dependency>
+
 			<!-- JWT -->
 			<dependency>
 				<groupId>io.jsonwebtoken</groupId>

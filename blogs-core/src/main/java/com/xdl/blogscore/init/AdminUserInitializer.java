@@ -40,6 +40,17 @@ public class AdminUserInitializer implements ApplicationRunner {
      */
     private static final String INIT_PASSWORD_PROPERTY = "ADMIN_INIT_PASSWORD";
 
+    /**
+     * 契约 6.2.1：密码长度 6-64。初始密码短于下限时创建出的账号无法通过登录参数校验，
+     * 等于制造一个永久登录不进去的管理员，因此这里直接拒绝初始化
+     */
+    private static final int PASSWORD_MIN_LENGTH = 6;
+
+    /**
+     * 契约 6.2.1：密码长度上限
+     */
+    private static final int PASSWORD_MAX_LENGTH = 64;
+
     private final AdminUserService adminUserService;
 
     private final PasswordEncoder passwordEncoder;
@@ -56,6 +67,12 @@ public class AdminUserInitializer implements ApplicationRunner {
             log.warn("admin_user 表为空且未设置环境变量 {}，跳过管理员初始化；"
                     + "请设置该环境变量（不少于 6 位）后重启，以创建首个管理员账号 {}",
                     INIT_PASSWORD_PROPERTY, INIT_ADMIN_USERNAME);
+            return;
+        }
+        if (initPassword.length() < PASSWORD_MIN_LENGTH || initPassword.length() > PASSWORD_MAX_LENGTH) {
+            log.error("环境变量 {} 长度为 {}，不符合契约要求的 {}-{} 位，已跳过管理员初始化；"
+                            + "请修正该环境变量后重启，否则无法登录（表仍为空时将再次尝试）",
+                    INIT_PASSWORD_PROPERTY, initPassword.length(), PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH);
             return;
         }
         AdminUser adminUser = AdminUser.builder()

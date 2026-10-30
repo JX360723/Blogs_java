@@ -50,17 +50,24 @@ public class AdminUserInfo implements Serializable {
 
     /**
      * 由管理员实体转换为对外视图，剔除密码字段
+     * <p>
+     * role 为空时兜底为 ADMIN（与 AuthServiceImpl#resolveRole 保持一致），
+     * 保证登录响应与 JWT claims 中的角色一致，前端拿到的 userInfo.role 不会为 null。
      *
      * @param adminUser 管理员实体
      * @return 对外管理员信息
      */
     public static AdminUserInfo from(AdminUser adminUser) {
+        String role = adminUser.getRole();
+        if (role == null || role.isBlank()) {
+            role = AdminUser.ROLE_ADMIN;
+        }
         return AdminUserInfo.builder()
                 .id(adminUser.getId())
                 .username(adminUser.getUsername())
                 .nickname(adminUser.getNickname())
                 .avatar(adminUser.getAvatar())
-                .role(adminUser.getRole())
+                .role(role)
                 .build();
     }
 }

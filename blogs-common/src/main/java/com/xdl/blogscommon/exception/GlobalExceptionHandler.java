@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -77,6 +78,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleMissingParameterException(MissingServletRequestParameterException exception) {
         String message = "缺少必要参数: " + exception.getParameterName();
         log.warn("缺少必要参数: {}", exception.getParameterName());
+        return buildResponse(ResultCode.BAD_REQUEST, message);
+    }
+
+    /**
+     * 路径/查询参数类型不匹配
+     * <p>
+     * 例如 {@code GET /api/v1/articles/abc}，Spring 无法把 "abc" 转成 Long。
+     * 若不显式处理，会被兜底处理器当成 500，前端会误报「服务器错误」，
+     * 这里按契约归为 400 参数错误，且不回显原始输入内容。
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Result<Void>> handleTypeMismatchException(MethodArgumentTypeMismatchException exception) {
+        String message = "参数类型不正确: " + exception.getName();
+        log.warn("参数类型不匹配: {}", exception.getName());
         return buildResponse(ResultCode.BAD_REQUEST, message);
     }
 
