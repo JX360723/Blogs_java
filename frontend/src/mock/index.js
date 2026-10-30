@@ -1,14 +1,15 @@
 // 统一 mock 适配器：当 USE_MOCK=true 时，axios 请求不再发出网络，而是由本适配器按
 // 「方法 + URL 模式」匹配到本地处理器并返回契约规定的 Result<T> 包络。
 //
-// 15:00 切真实接口：只需把 USE_MOCK 置为 false（.env.local 里 VITE_USE_MOCK=false），
+// 切真实接口：只需把 USE_MOCK 置为 false（.env.local 里 VITE_USE_MOCK=false），
 // API 层零改动，请求将直接走 vite proxy → http://localhost:8080。
-import { mockArticles, mockCategories, mockAdmin, mockAdminDisabled } from './data.js'
+import { mockArticles, mockCategories, mockTags, mockAdmin, mockAdminDisabled } from './data.js'
 
 // 默认开启 mock；可用 VITE_USE_MOCK=false 关闭（node 冒烟测试环境无 import.meta.env 时按开启处理）
 export const USE_MOCK = (import.meta.env && import.meta.env.VITE_USE_MOCK) !== 'false'
 
 let nextArticleId = 100
+let nextTagId = 100
 
 // ---- Result<T> 包络（对齐 API_CONTRACT.md）----
 function ok(data) {
@@ -83,13 +84,25 @@ function parseBody(config) {
 
 // ---- 接口实现（对齐 API_CONTRACT.md MVP 主链路）----
 
-// 公开：文章列表（仅已发布；支持分页/分类过滤）
+// 公开：文章列表（仅已发布；支持分页/分类/关键词/标签过滤）
+// 契约参数：pageNum/pageSize/categoryId/keyword；tagId 为本前端新增（后端阶段3落地时补充）
 route('GET', /^\/articles$/, (config) => {
   const p = queryParams(config)
   const status = p.status === undefined ? 1 : Number(p.status)
   const catId = p.categoryId ? Number(p.categoryId) : null
+  const tagId = p.tagId ? Number(p.tagId) : null
+  const keyword = p.keyword ? String(p.keyword).trim().toLowerCase() : ''
   let list = mockArticles.filter((a) => a.status === status)
   if (catId) list = list.filter((a) => a.categoryId === catId)
+  if (tagId) list = list.filter((a) => (a.tagIds || []).includes(tagId))
+  if (keyword) {
+    list = list.filter(
+      (a) =>
+        (a.title || '').toLowerCase().includes(keyword) ||
+        (a.summary || '').toLowerCase().includes(keyword) ||
+        (a.contentMd || '').toLowerCase().includes(keyword)
+    )
+  }
   list = [...list].sort((a, b) => (b.isTop || 0) - (a.isTop || 0) || b.createdAt - a.createdAt)
   return ok(paginate(list, p))
 })
@@ -104,6 +117,9 @@ route('GET', /^\/articles\/(\d+)$/, (config, [id]) => {
 
 // 公开：分类列表
 route('GET', /^\/categories$/, () => ok([...mockCategories].sort((a, b) => a.sortOrder - b.sortOrder)))
+
+// 公开：标签列表（访客端标签筛选用）
+route('GET', /^\/tags$/, () => ok([...mockTags].sort((a, b) => a.id - b.id)))
 
 // 管理端：登录（对齐 API_CONTRACT.md 6.2.1 冻结规范 2026-10-20）
 // 成功 data：{ token, tokenType:'Bearer', expiresIn:86400, userInfo }
@@ -185,7 +201,9 @@ route('PUT', /^\/admin\/articles\/(\d+)$/, (config, [id]) => {
     contentMd: body.contentMd ?? article.contentMd,
     categoryId: body.categoryId ?? article.categoryId,
     status: body.status ?? article.status,
+    coverImage: body.coverImage ?? article.coverImage,
     isTop: body.isTop ?? article.isTop,
+    tagIds: body.tagIds ?? article.tagIds,
     updatedAt: Date.now()
   })
   return ok(article)
@@ -238,6 +256,45 @@ route('DELETE', /^\/admin\/categories\/(\d+)$/, (config, [id]) => {
   const idx = mockCategories.findIndex((c) => c.id === Number(id))
   if (idx < 0) return fail(404, '分类不存在')
   mockCategories.splice(idx, 1)
+  return ok(null)
+})
+
+// 管理端：标签列表（与公开一致，管理页复用）
+route('GET', /^\/admin\/tags$/, () => ok([...mockTags].sort((a, b) => a.id - b.id)))
+
+// 管理端：新建标签
+route('POST', /^\/admin\/tags$/, (config) => {
+  const body = parseBody(config)
+  const id = nextTagId++
+  const tag = {
+    id,
+    name: body.name || '未命名标签',
+    description: body.description || '',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }
+  mockTags.push(tag)
+  return ok(tag)
+})
+
+// 管理端：更新标签
+route('PUT', /^\/admin\/tags\/(\d+)$/, (config, [id]) => {
+  const tag = mockTags.find((t) => t.id === Number(id))
+  if (!tag) return fail(404, '标签不存在')
+  const body = parseBody(config)
+  Object.assign(tag, {
+    name: body.name ?? tag.name,
+    description: body.description ?? tag.description,
+    updatedAt: Date.now()
+  })
+  return ok(tag)
+})
+
+// 管理端：删除标签
+route('DELETE', /^\/admin\/tags\/(\d+)$/, (config, [id]) => {
+  const idx = mockTags.findIndex((t) => t.id === Number(id))
+  if (idx < 0) return fail(404, '标签不存在')
+  mockTags.splice(idx, 1)
   return ok(null)
 })
 

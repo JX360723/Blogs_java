@@ -11,12 +11,38 @@
 
     <main class="container">
       <div class="toolbar">
-        <el-radio-group v-model="categoryId" @change="onCategoryChange">
+        <div class="search-bar">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索文章关键词（标题/摘要/正文）"
+            clearable
+            @keyup.enter="onSearch"
+            @clear="onSearch"
+          >
+            <template #append>
+              <el-button :icon="Search" @click="onSearch">搜索</el-button>
+            </template>
+          </el-input>
+        </div>
+
+        <el-radio-group v-model="categoryId" @change="onFilterChange">
           <el-radio-button :value="0">全部</el-radio-button>
           <el-radio-button v-for="c in categories" :key="c.id" :value="c.id">
             {{ c.name }}
           </el-radio-button>
         </el-radio-group>
+
+        <div class="tag-bar">
+          <span class="tag-label">标签：</span>
+          <el-check-tag
+            v-for="t in tags"
+            :key="t.id"
+            :checked="tagId === t.id"
+            @change="onTagChange(t.id)"
+          >
+            {{ t.name }}
+          </el-check-tag>
+        </div>
       </div>
 
       <el-card v-if="loading" class="empty-card" shadow="never">
@@ -57,13 +83,18 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import { getPublicArticles } from '../../api/articles'
 import { getCategories } from '../../api/categories'
+import { getTags } from '../../api/tags'
 
 const router = useRouter()
 const articles = ref([])
 const categories = ref([])
+const tags = ref([])
 const categoryId = ref(0)
+const tagId = ref(0)
+const keyword = ref('')
 const pageNum = ref(1)
 const pageSize = 10
 const total = ref(0)
@@ -74,6 +105,8 @@ async function load() {
   try {
     const params = { pageNum: pageNum.value, pageSize }
     if (categoryId.value) params.categoryId = categoryId.value
+    if (tagId.value) params.tagId = tagId.value
+    if (keyword.value.trim()) params.keyword = keyword.value.trim()
     const data = await getPublicArticles(params)
     articles.value = data.list || []
     total.value = data.total || 0
@@ -84,7 +117,23 @@ async function load() {
   }
 }
 
+function onSearch() {
+  pageNum.value = 1
+  load()
+}
+
 function onCategoryChange() {
+  pageNum.value = 1
+  load()
+}
+
+function onFilterChange() {
+  pageNum.value = 1
+  load()
+}
+
+function onTagChange(id) {
+  tagId.value = tagId.value === id ? 0 : id
   pageNum.value = 1
   load()
 }
@@ -112,6 +161,11 @@ onMounted(async () => {
     categories.value = (await getCategories()) || []
   } catch (e) {
     /* 分类加载失败不阻塞列表 */
+  }
+  try {
+    tags.value = (await getTags()) || []
+  } catch (e) {
+    /* 标签加载失败不阻塞列表 */
   }
   load()
 })
@@ -153,6 +207,22 @@ onMounted(async () => {
 }
 .toolbar {
   margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.search-bar {
+  max-width: 420px;
+}
+.tag-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tag-label {
+  color: #909399;
+  font-size: 13px;
 }
 .article-card {
   margin-bottom: 14px;

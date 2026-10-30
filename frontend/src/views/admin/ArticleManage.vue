@@ -13,6 +13,11 @@
 
       <el-table v-loading="loading" :data="list" stripe>
         <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="置顶" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.isTop" type="danger" size="small" effect="plain">置顶</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
         <el-table-column label="分类" width="120">
           <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
@@ -49,8 +54,9 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑文章' : '新建文章'"
-      width="680px"
+      width="860px"
       destroy-on-close
+      top="6vh"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="标题" prop="title">
@@ -61,11 +67,33 @@
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="封面">
+          <el-input v-model="form.coverImage" placeholder="封面图片 URL（可选）" clearable />
+        </el-form-item>
         <el-form-item label="摘要">
           <el-input v-model="form.summary" type="textarea" :rows="2" placeholder="文章摘要（可选）" />
         </el-form-item>
         <el-form-item label="正文" prop="contentMd">
-          <el-input v-model="form.contentMd" type="textarea" :rows="10" placeholder="支持 Markdown 文本（MVP 以纯文本展示）" />
+          <div class="md-editor">
+            <div class="md-pane">
+              <div class="pane-title">编辑（Markdown）</div>
+              <el-input
+                v-model="form.contentMd"
+                type="textarea"
+                :rows="16"
+                class="md-input"
+                placeholder="支持 Markdown：# 标题、**加粗**、- 列表、> 引用、``` 代码块、[链接](url)"
+              />
+            </div>
+            <div class="md-pane">
+              <div class="pane-title">预览</div>
+              <div class="md-preview markdown-body" v-html="renderedMd"></div>
+            </div>
+          </div>
+        </el-form-item>
+        <el-form-item label="置顶">
+          <el-switch v-model="form.isTop" :active-value="1" :inactive-value="0" />
+          <span class="tip">开启后文章在访客端列表置顶展示</span>
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
@@ -84,11 +112,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAdminArticles, createArticle, updateArticle, deleteArticle } from '../../api/articles'
 import { getAdminCategories } from '../../api/categories'
+import { renderMarkdown } from '../../utils/markdown'
 
 const list = ref([])
 const categories = ref([])
@@ -102,13 +131,16 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
-const form = reactive({ id: null, title: '', summary: '', contentMd: '', categoryId: null, status: 0 })
+const form = reactive({ id: null, title: '', summary: '', contentMd: '', categoryId: null, status: 0, coverImage: '', isTop: 0 })
 
 const rules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   categoryId: [{ required: true, message: '请选择分类', trigger: 'change' }],
   contentMd: [{ required: true, message: '请输入正文', trigger: 'blur' }]
 }
+
+// Markdown 实时预览（自实现轻量渲染，见 utils/markdown.js）
+const renderedMd = computed(() => renderMarkdown(form.contentMd || ''))
 
 function statusText(s) {
   return { 0: '草稿', 1: '已发布', 2: '已下架' }[s] || '未知'
@@ -147,7 +179,7 @@ function onFilterChange() {
 
 function openCreate() {
   isEdit.value = false
-  Object.assign(form, { id: null, title: '', summary: '', contentMd: '', categoryId: categories.value[0]?.id ?? null, status: 0 })
+  Object.assign(form, { id: null, title: '', summary: '', contentMd: '', categoryId: categories.value[0]?.id ?? null, status: 0, coverImage: '', isTop: 0 })
   dialogVisible.value = true
 }
 
@@ -159,7 +191,9 @@ function openEdit(row) {
     summary: row.summary || '',
     contentMd: row.contentMd || '',
     categoryId: row.categoryId,
-    status: row.status
+    status: row.status,
+    coverImage: row.coverImage || '',
+    isTop: row.isTop || 0
   })
   dialogVisible.value = true
 }
@@ -218,5 +252,102 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.md-editor {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+.md-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pane-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+.md-input :deep(.el-textarea__inner) {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.md-preview {
+  flex: 1;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  padding: 8px 12px;
+  min-height: 332px;
+  max-height: 332px;
+  overflow: auto;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #303133;
+  word-break: break-word;
+}
+.tip {
+  margin-left: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+/* Markdown 预览基础排版（与访客端详情页保持一致） */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 0.6em 0 0.3em;
+  line-height: 1.4;
+}
+.markdown-body h1 {
+  font-size: 20px;
+}
+.markdown-body h2 {
+  font-size: 18px;
+}
+.markdown-body h3 {
+  font-size: 16px;
+}
+.markdown-body p {
+  margin: 0.4em 0;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.4em;
+  margin: 0.4em 0;
+}
+.markdown-body blockquote {
+  margin: 0.4em 0;
+  padding: 4px 12px;
+  border-left: 3px solid #409eff;
+  background: #f5f7fa;
+  color: #606266;
+}
+.markdown-body pre {
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 8px 12px;
+  overflow: auto;
+  margin: 0.4em 0;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+.markdown-body code {
+  background: #f6f8fa;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+.markdown-body a {
+  color: #409eff;
+}
+.markdown-body strong {
+  font-weight: 600;
 }
 </style>
