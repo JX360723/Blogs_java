@@ -47,6 +47,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAdminTags, createTag, updateTag, deleteTag } from '../../api/tags'
+import { formatDateTime as formatDate } from '../../utils/datetime'
 
 const list = ref([])
 const loading = ref(false)
@@ -69,12 +70,6 @@ async function load() {
   } finally {
     loading.value = false
   }
-}
-
-function formatDate(ts) {
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function openCreate() {

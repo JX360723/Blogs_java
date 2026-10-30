@@ -118,6 +118,7 @@ import { Plus } from '@element-plus/icons-vue'
 import { getAdminArticles, createArticle, updateArticle, deleteArticle } from '../../api/articles'
 import { getAdminCategories } from '../../api/categories'
 import { renderMarkdown } from '../../utils/markdown'
+import { formatDateTime as formatDate } from '../../utils/datetime'
 
 const list = ref([])
 const categories = ref([])
@@ -151,12 +152,6 @@ function statusTagType(s) {
 function categoryName(id) {
   return categories.value.find((c) => c.id === id)?.name || '未分类'
 }
-function formatDate(ts) {
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
 async function load() {
   loading.value = true
   try {

@@ -87,6 +87,7 @@ import { Search } from '@element-plus/icons-vue'
 import { getPublicArticles } from '../../api/articles'
 import { getCategories } from '../../api/categories'
 import { getTags } from '../../api/tags'
+import { formatDate } from '../../utils/datetime'
 
 const router = useRouter()
 const articles = ref([])
@@ -148,12 +149,6 @@ function goHome() {
 
 function goAdmin() {
   router.push('/admin')
-}
-
-function formatDate(ts) {
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 onMounted(async () => {

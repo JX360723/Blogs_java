@@ -32,6 +32,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getPublicArticle } from '../../api/articles'
 import { renderMarkdown } from '../../utils/markdown'
+import { formatDateTime as formatDate } from '../../utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,12 +40,6 @@ const article = ref(null)
 const loading = ref(true)
 
 const renderedMd = computed(() => renderMarkdown(article.value?.contentMd || ''))
-
-function formatDate(ts) {
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 onMounted(async () => {
   try {
