@@ -37,6 +37,12 @@ const routes = [
         name: 'AdminCategoryList',
         component: () => import('../views/admin/CategoryManage.vue'),
         meta: { requiresAuth: true }
+      },
+      {
+        path: 'tags',
+        name: 'AdminTagList',
+        component: () => import('../views/admin/TagManage.vue'),
+        meta: { requiresAuth: true }
       }
     ]
   },

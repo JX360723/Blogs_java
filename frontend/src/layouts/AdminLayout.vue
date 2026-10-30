@@ -11,7 +11,10 @@
           <el-icon><FolderOpened /></el-icon>
           <span>分类管理</span>
         </el-menu-item>
-        <!-- 标签为阶段3，不做 -->
+        <el-menu-item index="/admin/tags">
+          <el-icon><CollectionTag /></el-icon>
+          <span>标签管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -42,7 +45,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, FolderOpened, ArrowDown } from '@element-plus/icons-vue'
+import { Document, FolderOpened, CollectionTag, ArrowDown } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()

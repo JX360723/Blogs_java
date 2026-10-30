@@ -18,8 +18,8 @@
           {{ article.viewCount }}
         </div>
         <el-divider />
-        <!-- MVP 先用纯文本渲染 Markdown 原文；正式接入 markdown-it 后替换 -->
-        <div class="markdown-body">{{ article.contentMd }}</div>
+        <!-- Markdown 渲染（轻量自实现，见 utils/markdown.js；与编辑端预览一致） -->
+        <div class="markdown-body" v-html="renderedMd"></div>
       </template>
       <el-empty v-else description="文章不存在或未发布" />
     </main>
@@ -27,21 +27,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getPublicArticle } from '../../api/articles'
+import { renderMarkdown } from '../../utils/markdown'
+import { formatDateTime as formatDate } from '../../utils/datetime'
 
 const route = useRoute()
 const router = useRouter()
 const article = ref(null)
 const loading = ref(true)
 
-function formatDate(ts) {
-  const d = new Date(ts)
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
+const renderedMd = computed(() => renderMarkdown(article.value?.contentMd || ''))
 
 onMounted(async () => {
   try {
@@ -99,11 +97,67 @@ onMounted(async () => {
   color: #909399;
   font-size: 13px;
 }
+/* Markdown 排版（与编辑端预览一致） */
 .markdown-body {
   color: #303133;
   line-height: 1.8;
   font-size: 15px;
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 0.8em 0 0.4em;
+  line-height: 1.4;
+}
+.markdown-body h1 {
+  font-size: 22px;
+}
+.markdown-body h2 {
+  font-size: 19px;
+}
+.markdown-body h3 {
+  font-size: 17px;
+}
+.markdown-body p {
+  margin: 0.5em 0;
+}
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 1.6em;
+  margin: 0.5em 0;
+}
+.markdown-body blockquote {
+  margin: 0.5em 0;
+  padding: 6px 14px;
+  border-left: 3px solid #409eff;
+  background: #f5f7fa;
+  color: #606266;
+}
+.markdown-body pre {
+  background: #f6f8fa;
+  border-radius: 4px;
+  padding: 10px 14px;
+  overflow: auto;
+  margin: 0.5em 0;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+.markdown-body code {
+  background: #f6f8fa;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 13px;
+}
+.markdown-body a {
+  color: #409eff;
+}
+.markdown-body strong {
+  font-weight: 600;
 }
 </style>
