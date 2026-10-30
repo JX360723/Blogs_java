@@ -216,31 +216,15 @@ throw new BusinessException(ResultCode.BAD_REQUEST, "文章状态值非法");
 
 ### 3.3 已知坑点（必读，踩了会浪费大量时间）
 
-**坑点 1：分页插件没配 ⚠️ 最高优先级**
+**坑点 1：分页插件 ✅ 已解决（2026-10-30）**
 
-`blogs-core/src/main/java/com/xdl/blogscore/config/MybatisPlusConfig.java` 当前只有：
+`blogs-core/src/main/java/com/xdl/blogscore/config/MybatisPlusConfig.java` 已注册 `PaginationInnerInterceptor`（方言 `DbType.MYSQL`），并设置单页最大条数 100，避免被构造超大 `pageSize` 拉全表；`blogs-core/pom.xml` 同步补了 `mybatis-plus-jsqlparser`（MyBatis-Plus 3.5.9 起 JSqlParser 支持已从 extension 拆出，缺了分页执行会报类缺失）。
 
-```java
-@Configuration
-@MapperScan("com.xdl.blogscore.mapper")
-public class MybatisPlusConfig {
-}
-```
+**后续注意**：新增分页查询直接用 `page()`，不要再手工拼 `LIMIT`。
 
-**必须补 `PaginationInnerInterceptor`，否则 `page()` 不生效**——会返回全表数据、`total` 为 0：
+**坑点 2：建表脚本 ✅ 已解决（2026-10-30）**
 
-```java
-@Bean
-public MybatisPlusInterceptor mybatisPlusInterceptor() {
-    MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
-    interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
-    return interceptor;
-}
-```
-
-**坑点 2：建表脚本不全**
-
-`blogs-admin/src/main/resources/db/schema.sql` 只有 `admin_user`。`article` / `category` 的 DDL 在仓库根目录 `sql/schema.sql`（已与实体逐字段核对一致，可直接引用）。dev 启动要自动建全表，需把这两段并入 `db/schema.sql`。
+`blogs-admin/src/main/resources/db/schema.sql` 已含全部三张表（`admin_user` / `article` / `category`），dev 启动时 `spring.sql.init` 会自动建全表，不再需要手工执行 `sql/schema.sql`。
 
 **坑点 3：`publishedAt` 字段不存在**
 
@@ -277,6 +261,18 @@ java -jar blogs-admin/target/blogs-admin-0.0.1-SNAPSHOT.jar
 **坑点 8：`contentHtml` 渲染职责未定**
 
 契约里 `contentHtml` 字段存在，但「前端提交还是后端渲染」未决策。**建议后端渲染**：接收 `contentMd` 后转 HTML 存入 `contentHtml`（可用 `commonmark-java`，轻量无额外负担）。若不想引依赖，可先原样透传，但要在代码注释里标注待定。
+
+**坑点 9：时间字段格式 ✅ 已解决（2026-10-30）**
+
+`blogs-common/src/main/java/com/xdl/blogscommon/config/JacksonConfig.java` 已统一 `LocalDateTime` / `LocalDate` 的序列化与反序列化格式为 `yyyy-MM-dd HH:mm:ss` / `yyyy-MM-dd`。
+
+**后续注意，别改回去**：
+
+- 不要改成带 `T` 的 ISO 格式，也不要附加时区偏移——附加时区会让前端显示多/少 8 小时
+- 反序列化必须一起配，否则前端回传的时间字符串后端解析会报 400
+- `spring.jackson.date-format` 只作用于 `java.util.Date`，对 `java.time` 类型无效，必须自定义 serializer
+
+前端侧对应实现是 `frontend/src/utils/datetime.js`，两种格式都能解析，所以后端只要保持空格格式就不会出问题。
 
 ---
 
