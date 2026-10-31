@@ -369,17 +369,18 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 
 ---
 
-## 五、时间格式规范 ⚠️ 当前存在不一致
+## 五、时间格式规范 ✅ 已落地（`yyyy-MM-dd HH:mm:ss`，不带时区）
 
-### 5.1 问题
+### 5.1 现状（2026-10-30 更新）
 
 - 契约文档示例写的是 `2026-10-01 10:00:00`（空格分隔）
-- 但**当前 Jackson 未做任何日期格式配置**
-- Spring Boot 3 + `JavaTimeModule` 默认把 `LocalDateTime` 序列化为 **ISO-8601 带 T**：`2026-10-01T10:00:00`
+- Spring Boot 3 + `JavaTimeModule` 默认把 `LocalDateTime` 序列化为 ISO-8601 带 T：`2026-10-01T10:00:00`
+- **后端已落地**：`blogs-common/src/main/java/com/xdl/blogscommon/config/JacksonConfig.java` 统一注册 `LocalDateTime` / `LocalDate` 的序列化与反序列化器，输出空格格式，响应包络里的 `timestamp`（毫秒数）不受影响
+- **前端已兼容**：`frontend/src/utils/datetime.js` 用正则手动拆解年月日时分秒后构造本地 `Date`，空格格式与 ISO 格式都能正确解析，不依赖浏览器原生 `new Date(string)`（Safari / iOS WebView 会返回 `Invalid Date`）
 
-如果前端按空格格式解析，会拿不到正确时间。
+**结论：后端保持空格格式输出、不带时区偏移即可，两端都不需要再改。**
 
-### 5.2 建议方案
+### 5.2 已落地实现（参考）
 
 统一为 `yyyy-MM-dd HH:mm:ss`，在 `blogs-common` 或 `blogs-admin` 加全局 Jackson 配置：
 
