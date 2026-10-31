@@ -15,19 +15,28 @@
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="置顶" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.isTop" type="danger" size="small" effect="plain">置顶</el-tag>
+            <el-tag v-if="row.isTop === 1" type="danger" size="small" effect="plain">置顶</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column label="封面" width="140">
+          <template #default="{ row }">
+            <a v-if="row.coverImage" :href="row.coverImage" target="_blank" rel="noopener" class="cover-link" :title="row.coverImage">查看封面</a>
+            <span v-else class="cover-empty">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="分类" width="120">
-          <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
+          <!-- 后端 AdminArticleSummaryVO 返回 categoryName 时优先使用；缺失时回退本地分类表 -->
+          <template #default="{ row }">{{ row.categoryName || categoryName(row.categoryId) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="viewCount" label="阅读" width="90" />
+        <el-table-column label="阅读" width="90">
+          <template #default="{ row }">{{ row.viewCount ?? 0 }}</template>
+        </el-table-column>
         <el-table-column label="更新时间" width="160">
           <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
         </el-table-column>
@@ -247,6 +256,17 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.cover-link {
+  color: #409eff;
+  font-size: 13px;
+  text-decoration: none;
+}
+.cover-link:hover {
+  text-decoration: underline;
+}
+.cover-empty {
+  color: #c0c4cc;
 }
 .md-editor {
   display: flex;
