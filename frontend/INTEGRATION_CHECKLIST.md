@@ -1,7 +1,8 @@
 # 本地联调 Checklist（真实后端）
 
 > 适用：开发者在**自己电脑**上跑通「前端 → 真实后端」全链路。
-> 基线：后端 main 已含公开侧 5 接口 + 管理端 8 接口（契约见 `docs/BACKEND_HANDOFF_WORKBUDDY_ADMIN_API.md`）。
+> 基线：后端 main 已含登录/me + 公开侧 3 个接口（文章列表、文章详情、分类列表）。
+> **管理端 8 个接口尚未实现**（契约见 `docs/BACKEND_HANDOFF_WORKBUDDY_ADMIN_API.md`），第 5 节管理端验证需等后端交付后再执行。
 > 注意：Agent 云端环境访问不到你本机 `localhost:8080`，本清单由你本机执行。
 
 ## 0. 准备
@@ -77,7 +78,7 @@ curl -s "http://localhost:8080/api/v1/articles?pageNum=1&pageSize=10&keyword=Vue
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6   # 期望 404
 ```
 
-## 5. 管理端 8 个接口（逐个验证）
+## 5. 管理端 8 个接口（⚠️ 待后端交付后执行）
 
 全部需要 `Authorization: Bearer $TOKEN`；不带 token → 401，非管理员 → 403。
 
