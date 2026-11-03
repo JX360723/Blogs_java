@@ -8,12 +8,14 @@
 ## 2. 确定技术栈
 
 -   Vue 3
--   TypeScript
+-   **纯 JavaScript（不使用 TypeScript，已锁定）**
 -   Vite
 -   Element Plus
 -   Vue Router
 -   Pinia
 -   Axios
+
+**技术栈已锁定为纯 JavaScript，不引入 TypeScript**：项目内所有前端文件为 `.js` / `.vue`，不新增 `.ts` / `.tsx`，不加 `typescript` 依赖，不做类型检查步骤。
 
 生产部署使用 Docker 多阶段构建与 Nginx
 提供静态文件。具体版本由项目初始化时选取并锁定，避免无必要地频繁升级。
@@ -41,7 +43,7 @@ frontend/
 ├── nginx.conf
 ├── package.json
 ├── package-lock.json
-├── vite.config.ts
+├── vite.config.js
 └── .env.example
 ```
 
@@ -95,7 +97,7 @@ Plus 主要用于后台表单、表格、弹窗和管理交互。
 ## 7. 验收标准
 
 -   [ ] 依赖可通过锁文件稳定安装。
--   [ ] TypeScript 检查和生产构建通过。
+-   [ ] 生产构建通过（纯 JavaScript，无 TypeScript 类型检查步骤）。
 -   [ ] 首页、列表、详情和关于页面可访问。
 -   [ ] 后台登录和内容管理使用真实 API。
 -   [ ] 刷新嵌套路由不会出现错误的服务器 404。
