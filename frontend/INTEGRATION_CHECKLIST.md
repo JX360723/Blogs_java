@@ -90,7 +90,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6
 | ② | `POST /api/v1/admin/articles` | body `{title, summary, contentMd, categoryId, status, coverImage, isTop}`；返回 data 为 id（Long） |
 | ③ | `PUT /api/v1/admin/articles/{id}` | body 同上；200；改 status=1 后公开列表能搜到 |
 | ④ | `DELETE /api/v1/admin/articles/{id}` | 200（逻辑删除）；删除后管理列表消失、公开详情 404 |
-| ⑤ | `GET /api/v1/admin/articles/{id}` | 200；**`data.contentMd` 必须是完整正文**。这条不通过会导致「编辑文章保存后正文被清空」——列表接口不含正文，编辑必须靠它回填 |
+| ⑤ | `GET /api/v1/admin/articles/{id}` | 200；**`data.contentMd` 必须是完整正文**（路径与字段名已于 2026-11-04 与后端确认）。这条不通过会导致「编辑文章保存后正文被清空」——列表接口不含正文，编辑必须靠它回填 |
 
 ### 5.2 分类 CRUD
 
