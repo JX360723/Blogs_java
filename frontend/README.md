@@ -1,6 +1,6 @@
 # 博客前端（frontend/）
 
-个人知识博客网站 · 前端工程（MVP 冲刺版，2026-10-30 续）
+个人知识博客网站 · 前端工程（MVP 冲刺版，2026-10-31 联调准备）
 
 - 技术栈：Vue 3 + 纯 JavaScript（严禁 TypeScript）+ Vite + Element Plus + Vue Router + Pinia + Axios
 - 基址：`/api/v1`（本地 dev 经 Vite proxy `/api → http://localhost:8080`，与后端 `API_CONTRACT.md` 一致）
@@ -38,6 +38,28 @@ if (USE_MOCK) {
 }
 ```
 
+## 如何切真实后端（本地联调）
+
+1. 复制联调配置模板为本地文件（**该文件已被 .gitignore 忽略，不会提交**）：
+
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+2. 确认 `.env.local` 内容：
+
+   ```env
+   VITE_API_BASE_URL=/api/v1
+   VITE_USE_MOCK=false
+   ```
+
+3. 后端先起在本机 `localhost:8080`（见下方 checklist），再 `npm run dev` 起前端，
+   Vite proxy 会把 `/api/*` 转发到 `http://localhost:8080`（`vite.config.js` 已配，无需改动）。
+
+4. 联调完成后想回退 mock：删除 `.env.local`（或把 `VITE_USE_MOCK` 改回 `true`）即可。
+
+> 完整验证步骤、管理端 8 个接口逐个验证点、常见报错排查见 **[INTEGRATION_CHECKLIST.md](INTEGRATION_CHECKLIST.md)**。
+
 ## 目录结构
 
 ```
@@ -48,21 +70,26 @@ frontend/
 │   ├── stores/         # Pinia（auth 登录态）
 │   ├── router/         # 路由 + 守卫（/admin/** 需 token）
 │   ├── utils/          # axios 实例（baseURL=/api/v1，解包 Result<T>，401 跳登录）
-│   │                    # + markdown.js（轻量 Markdown 渲染器，自实现）
+│   │                    # + markdown.js（轻量 Markdown 渲染器，自实现）+ datetime.js（日期安全格式化）
 │   ├── layouts/        # AdminLayout（侧边菜单 + 顶栏）
 │   └── views/
-│       ├── public/     # 访客端：文章列表（分页+搜索+标签筛选）、文章详情（Markdown）、404
+│       ├── public/     # 访客端：文章列表（分页+搜索+分类筛选）、文章详情（Markdown）、404
 │       ├── auth/       # 登录页
 │       └── admin/      # 文章管理（含封面/置顶/Markdown 分栏预览）、分类管理、标签管理
 ├── vite.config.js      # /api 代理 → http://localhost:8080
+├── .env.example        # 默认配置模板（mock 开）
+├── .env.local.example  # 联调配置模板（mock 关）
 └── package.json
 ```
 
 ## MVP 已覆盖主链路
 
-访客看文章（列表：分页/分类/关键词搜索/标签筛选；详情：Markdown 渲染）→ 管理员登录（admin / admin123，mock 专用；
+访客看文章（列表：分页/分类/关键词搜索；详情：Markdown 渲染）→ 管理员登录（admin / admin123，mock 专用；
 禁用账号 disabled / admin123 演示 403）→ 发文（新建/编辑/删除，支持封面 URL、置顶开关、Markdown 分栏实时预览）→
 分类管理（增删改查）→ 标签管理（增删改查，mock 先行）。
+
+> 访客端**标签筛选**：后端 `ArticleQueryRequest` 暂无 `tagId`（契约 6.1.1 标注阶段3），为避免用户点击无反应误判为 bug，
+> 已默认隐藏筛选条并显示「阶段3开放」占位提示（`ArticleList.vue` 中 `tagFilterEnabled` 置 true 即可恢复，代码路径完整保留）。
 
 ## 与契约/文档的差异与假设（待后端确认）
 
@@ -71,25 +98,26 @@ frontend/
    `GET /api/v1/auth/me` 获取当前用户信息。若后端返回结构不同，需调整 `src/api/auth.js` 与 `src/stores/auth.js`。
 3. **Markdown 渲染**：已自实现轻量渲染器 `src/utils/markdown.js`（标题/列表/引用/代码块/加粗/斜体/行内代码/链接），
    编辑端分栏实时预览 + 详情页渲染共用；正式版若需完整语法建议接入 markdown-it + 代码高亮。
-4. **管理端文章列表**：使用 `GET /api/v1/admin/articles`（含草稿/下架 + status 过滤），公开列表用 `GET /api/v1/articles`
-   （仅已发布 + categoryId + keyword + tagId 过滤）。后端若未单独提供 admin 列表接口，需补充。
+4. **管理端文章列表**：使用 `GET /api/v1/admin/articles`（含草稿/下架 + status 过滤，表格列对 status/updatedAt/categoryName/
+   coverImage/isTop 缺失均有兜底显示）；公开列表用 `GET /api/v1/articles`（仅已发布 + categoryId + keyword 过滤；
+   **tagId 为阶段3能力，访客端筛选已降级隐藏**，后端实现后打开 `tagFilterEnabled` 并同步契约即可）。
 5. **标签**：MVP 已纳入（排在分类之后）。前端接口已定型（`GET /tags`、`GET/POST/PUT/DELETE /admin/tags`），
-   **后端 tag 表为阶段3未建，当前 mock 先行**；对接后需后端实现标签接口并同步 `keyword/tagId` 过滤。
+   **后端 tag 表为阶段3未建，当前 mock 先行**；管理端标签页保留可用，对接后需后端实现标签接口。
 6. **站点设置**：契约标记「MVP 不支持」，未实现。
 7. **mock 管理端接口**：`POST/PUT/DELETE /admin/articles`、`/admin/categories`、`/admin/tags` 为前端演示用，最终以审计后的真实接口为准。
 
 ## 后端必须提供（对接最小清单）
 
-- `GET  /api/v1/articles`（分页、仅已发布、categoryId/keyword/tagId 过滤）
+- `GET  /api/v1/articles`（分页、仅已发布、categoryId/keyword 过滤；tagId 阶段3）
 - `GET  /api/v1/articles/{id}`（仅已发布，未发布 404）
 - `GET  /api/v1/categories`
 - `GET  /api/v1/tags`
 - `POST /api/v1/auth/login`（返回 token + tokenType + expiresIn + userInfo；无状态 JWT）
 - `GET  /api/v1/auth/me`
-- `GET  /api/v1/admin/articles`（含草稿/下架，status 过滤）
-- `POST /api/v1/admin/articles`（新建，返回文章实体）
+- `GET  /api/v1/admin/articles`（含草稿/下架，status 过滤；返回 AdminArticleSummaryVO 含 status + updatedAt）
+- `POST /api/v1/admin/articles`（新建，返回文章 id/实体）
 - `PUT  /api/v1/admin/articles/{id}`（更新，含 coverImage/isTop/tagIds）
 - `DELETE /api/v1/admin/articles/{id}`（逻辑删除）
-- `GET/POST/PUT/DELETE /api/v1/admin/categories`（分类管理）
+- `GET/POST/PUT/DELETE /api/v1/admin/categories`（分类管理，删除需引用校验）
 - `GET/POST/PUT/DELETE /api/v1/admin/tags`（标签管理，阶段3后端落地）
 - 统一响应包络 `Result<T>`（code=200 成功）、错误码 400/401/403/404/500、分页 `pageNum/pageSize → { list,total,pageNum,pageSize,pages }`

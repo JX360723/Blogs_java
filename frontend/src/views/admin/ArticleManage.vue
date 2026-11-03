@@ -15,19 +15,28 @@
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="置顶" width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.isTop" type="danger" size="small" effect="plain">置顶</el-tag>
+            <el-tag v-if="row.isTop === 1" type="danger" size="small" effect="plain">置顶</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column label="封面" width="140">
+          <template #default="{ row }">
+            <a v-if="row.coverImage" :href="row.coverImage" target="_blank" rel="noopener" class="cover-link" :title="row.coverImage">查看封面</a>
+            <span v-else class="cover-empty">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="分类" width="120">
-          <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
+          <!-- 后端 AdminArticleSummaryVO 返回 categoryName 时优先使用；缺失时回退本地分类表 -->
+          <template #default="{ row }">{{ row.categoryName || categoryName(row.categoryId) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="statusTagType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="viewCount" label="阅读" width="90" />
+        <el-table-column label="阅读" width="90">
+          <template #default="{ row }">{{ row.viewCount ?? 0 }}</template>
+        </el-table-column>
         <el-table-column label="更新时间" width="160">
           <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
         </el-table-column>
@@ -58,7 +67,7 @@
       destroy-on-close
       top="6vh"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="80px">
+      <el-form ref="formRef" v-loading="formLoading" :model="form" :rules="rules" label-width="80px">
         <el-form-item label="标题" prop="title">
           <el-input v-model="form.title" placeholder="文章标题" maxlength="120" />
         </el-form-item>
@@ -115,7 +124,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { getAdminArticles, createArticle, updateArticle, deleteArticle } from '../../api/articles'
+import { getAdminArticles, getAdminArticle, createArticle, updateArticle, deleteArticle } from '../../api/articles'
 import { getAdminCategories } from '../../api/categories'
 import { renderMarkdown } from '../../utils/markdown'
 import { formatDateTime as formatDate } from '../../utils/datetime'
@@ -124,6 +133,7 @@ const list = ref([])
 const categories = ref([])
 const loading = ref(false)
 const saving = ref(false)
+const formLoading = ref(false)
 const statusFilter = ref('')
 const pageNum = ref(1)
 const pageSize = 10
@@ -178,30 +188,42 @@ function openCreate() {
   dialogVisible.value = true
 }
 
-function openEdit(row) {
+// 编辑必须先拉详情：列表接口不返回 contentMd（刻意排除大字段），
+// 若直接拿列表行回填，正文会是空字符串，保存后原文即被清空。
+async function openEdit(row) {
   isEdit.value = true
-  Object.assign(form, {
-    id: row.id,
-    title: row.title,
-    summary: row.summary || '',
-    contentMd: row.contentMd || '',
-    categoryId: row.categoryId,
-    status: row.status,
-    coverImage: row.coverImage || '',
-    isTop: row.isTop || 0
-  })
   dialogVisible.value = true
+  formLoading.value = true
+  try {
+    const detail = await getAdminArticle(row.id)
+    Object.assign(form, {
+      id: detail.id,
+      title: detail.title || '',
+      summary: detail.summary || '',
+      contentMd: detail.contentMd || '',
+      categoryId: detail.categoryId,
+      status: detail.status ?? 0,
+      coverImage: detail.coverImage || '',
+      isTop: detail.isTop || 0
+    })
+  } catch (e) {
+    dialogVisible.value = false
+    ElMessage.error('加载文章详情失败')
+  } finally {
+    formLoading.value = false
+  }
 }
 
 async function onSave() {
   await formRef.value.validate()
   saving.value = true
   try {
+    const { id, ...payload } = form
     if (isEdit.value) {
-      await updateArticle(form.id, { ...form })
+      await updateArticle(id, payload)
       ElMessage.success('更新成功')
     } else {
-      await createArticle({ ...form })
+      await createArticle(payload)
       ElMessage.success('创建成功')
     }
     dialogVisible.value = false
@@ -218,6 +240,10 @@ async function onDelete(row) {
     await ElMessageBox.confirm(`确定删除文章「${row.title}」吗？`, '提示', { type: 'warning' })
     await deleteArticle(row.id)
     ElMessage.success('已删除')
+    // 删掉的是本页最后一条时往前翻一页，避免停在空白页
+    if (list.value.length === 1 && pageNum.value > 1) {
+      pageNum.value -= 1
+    }
     load()
   } catch (e) {
     /* 取消或失败 */
@@ -247,6 +273,17 @@ onMounted(async () => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.cover-link {
+  color: #409eff;
+  font-size: 13px;
+  text-decoration: none;
+}
+.cover-link:hover {
+  text-decoration: underline;
+}
+.cover-empty {
+  color: #c0c4cc;
 }
 .md-editor {
   display: flex;

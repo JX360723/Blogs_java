@@ -13,6 +13,11 @@ const routes = [
     component: () => import('../views/public/ArticleDetail.vue'),
     props: true
   },
+  {
+    path: '/about',
+    name: 'About',
+    component: () => import('../views/public/About.vue')
+  },
   // ---- 登录 ----
   {
     path: '/login',
