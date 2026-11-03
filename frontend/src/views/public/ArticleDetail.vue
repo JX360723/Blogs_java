@@ -5,6 +5,7 @@
         <div class="logo" @click="router.push('/')">个人知识博客</div>
         <nav class="nav">
           <el-button text @click="router.push('/')">返回列表</el-button>
+          <el-button text @click="router.push('/about')">关于</el-button>
         </nav>
       </div>
     </header>

@@ -4,6 +4,7 @@
       <div class="header-inner">
         <div class="logo" @click="goHome">个人知识博客</div>
         <nav class="nav">
+          <el-button text @click="goAbout">关于</el-button>
           <el-button text @click="goAdmin">管理后台</el-button>
         </nav>
       </div>
@@ -156,6 +157,10 @@ function goDetail(id) {
 
 function goHome() {
   router.push('/')
+}
+
+function goAbout() {
+  router.push('/about')
 }
 
 function goAdmin() {

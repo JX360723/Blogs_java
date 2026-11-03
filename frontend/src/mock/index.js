@@ -166,6 +166,14 @@ route('GET', /^\/admin\/articles$/, (config) => {
   return ok(paginate(list, p))
 })
 
+// 管理端：文章详情（含 contentMd 全文，编辑回填用；列表接口不含大字段）
+route('GET', /^\/admin\/articles\/(\d+)$/, (config, [id]) => {
+  const article = mockArticles.find((a) => a.id === Number(id))
+  if (!article) return fail(404, '文章不存在')
+  const cat = mockCategories.find((c) => c.id === article.categoryId)
+  return ok({ ...article, categoryName: cat?.name || '' })
+})
+
 // 管理端：新建文章
 route('POST', /^\/admin\/articles$/, (config) => {
   const body = parseBody(config)
