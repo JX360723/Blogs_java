@@ -3,6 +3,7 @@
 > 用途：整段复制给 WorkBuddy 执行
 > 基线：`origin/main` = `e1ca1e8`（2026-11-03 核验）
 > 修订：2026-11-03 21:30 由 8 个接口增至 9 个，新增管理端文章详情接口，原因见坑点 3
+> 确认：2026-11-04 03:07 后端已确认详情接口路径与字段名 —— `GET /api/v1/admin/articles/{id}`，响应读 `contentMd`。前端 `baseURL=/api/v1`，源码写 `service.get('/admin/articles/' + id)`，拼接结果与之一致，无需改动
 > 前端契约来源：`frontend/src/api/articles.js`、`frontend/src/api/categories.js`、`frontend/src/views/admin/*.vue`（逐字段核对）
 
 ## 一、当前真实状态（不要重做已完成的部分）
