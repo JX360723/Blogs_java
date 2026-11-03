@@ -3,8 +3,11 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/blogs_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
-    username: root
-    password: 123456
+    # 数据库账号密码禁止写入仓库，本地启动前先导出环境变量：
+    #   export DB_USERNAME=root
+    #   export DB_PASSWORD=你的本地密码
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
 
   # Redis 配置
   data:
@@ -19,3 +22,9 @@ spring:
       mode: always
       schema-locations: classpath:db/schema.sql
       encoding: UTF-8
+
+# 仅开发环境打印 SQL：主配置 application.yaml 里刻意不设，
+# 避免生产环境把全量 SQL 与参数打进日志（性能 + 信息泄露）
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
