@@ -8,15 +8,27 @@ spring:
     active: dev # 激活开发环境配置 (对应 application-dev.yml)
 
 # MyBatis-Plus 配置
+# 注意：log-impl（SQL 打印）只在 application-dev.yml 里配置，
+# 不要写在这里，否则生产环境会打印全量 SQL 与参数
 mybatis-plus:
   configuration:
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开发环境控制台打印 SQL
     map-underscore-to-camel-case: true # 开启下划线转驼峰
   global-config:
     db-config:
       logic-delete-field: deleted # 逻辑删除全局字段
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+# 健康检查：SecurityConfig 已放行 /actuator/health，这里只暴露 health，
+# 不开放 env / beans / heapdump 等敏感端点
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 # 认证与安全配置
 blogs:
