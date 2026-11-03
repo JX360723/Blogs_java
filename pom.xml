@@ -33,6 +33,7 @@
 		<blogs.version>0.0.1-SNAPSHOT</blogs.version>
 		<mybatis-plus.version>3.5.9</mybatis-plus.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<commonmark.version>0.22.0</commonmark.version>
 	</properties>
 
 	<!-- 依赖版本统一管理 -->
@@ -89,6 +90,13 @@
 				<groupId>io.jsonwebtoken</groupId>
 				<artifactId>jjwt-jackson</artifactId>
 				<version>${jjwt.version}</version>
+			</dependency>
+
+			<!-- Markdown 渲染：管理端保存文章时由后端把 contentMd 渲染成 contentHtml（纯 Java，无传递依赖） -->
+			<dependency>
+				<groupId>org.commonmark</groupId>
+				<artifactId>commonmark</artifactId>
+				<version>${commonmark.version}</version>
 			</dependency>
 		</dependencies>
 	</dependencyManagement>

@@ -38,5 +38,10 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Markdown 渲染：保存文章时把 contentMd 转成 contentHtml，避免把渲染职责推给前端 -->
+        <dependency>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
+        </dependency>
     </dependencies>
 </project>

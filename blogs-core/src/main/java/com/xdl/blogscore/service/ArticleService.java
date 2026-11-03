@@ -1,8 +1,11 @@
 package com.xdl.blogscore.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.xdl.model.dto.AdminArticleQueryRequest;
 import com.xdl.model.dto.ArticleQueryRequest;
+import com.xdl.model.dto.ArticleSaveRequest;
 import com.xdl.model.entity.Article;
+import com.xdl.model.vo.AdminArticleSummaryVO;
 import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.ArticleSummaryVO;
 import com.xdl.model.vo.PageResult;
@@ -35,4 +38,58 @@ public interface ArticleService extends IService<Article> {
      * @return 文章详情（含正文）
      */
     ArticleDetailVO getPublishedDetail(Long id);
+
+    /**
+     * 管理端文章分页列表：包含草稿与已下架，可按状态/分类/关键词筛选
+     * <p>
+     * 对应 docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md 2.1「GET /api/v1/admin/articles」。
+     * 与公开列表的关键差异：不限制 status、返回 status 与 updatedAt；
+     * 但同样<b>不返回正文</b>（列表只取展示所需列）。
+     *
+     * @param query 分页与筛选条件，status 为 null 表示不过滤
+     * @return 前端约定的分页结构
+     */
+    PageResult<AdminArticleSummaryVO> pageForAdmin(AdminArticleQueryRequest query);
+
+    /**
+     * 管理端文章详情：草稿与已下架同样可查看，供编辑回填正文
+     * <p>
+     * 附带接口：施工单的 8 个接口未包含详情，但管理页「编辑」需要正文。
+     * 列表为控制响应体积不返回 contentMd，编辑前应调用本接口取回正文，
+     * 否则提交时会用空串覆盖原文。
+     *
+     * @param id 文章ID
+     * @return 文章详情（含 contentMd 与 contentHtml）
+     */
+    ArticleDetailVO getAdminDetail(Long id);
+
+    /**
+     * 创建文章
+     * <p>
+     * 服务端职责：userId 取当前登录管理员、contentHtml 由 contentMd 渲染、
+     * viewCount 强制 0、isTop 缺省 0、createdAt/updatedAt 自动填充。
+     *
+     * @param request 文章内容
+     * @param adminId 当前登录管理员ID
+     * @return 新文章ID
+     */
+    Long createArticle(ArticleSaveRequest request, Long adminId);
+
+    /**
+     * 更新文章
+     * <p>
+     * 只更新可编辑字段，不允许改动作者、创建时间与浏览次数；
+     * 正文有变更时同步重新渲染 contentHtml。
+     *
+     * @param id      文章ID
+     * @param request 文章内容
+     */
+    void updateArticle(Long id, ArticleSaveRequest request);
+
+    /**
+     * 逻辑删除文章（deleted=1，数据保留）
+     *
+     * @param id 文章ID
+     */
+    void deleteArticle(Long id);
 }
