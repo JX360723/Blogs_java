@@ -178,14 +178,15 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 | `tag` / `article_tag` | 标签纳入 MVP 但属**阶段 3**，开发顺序排在文章/分类之后；表结构待审计后设计 |
 | `site_settings` | 站点设置 MVP 不支持（2026-10-14 决策），站点信息走前端配置 |
 
-### 3.6 建表脚本现状 ⚠️
+### 3.6 建表脚本现状
 
 | 位置 | 内容 |
 | --- | --- |
-| `blogs-admin/src/main/resources/db/schema.sql` | **只有 `admin_user`**（dev 启动自动执行的就是这个） |
+| `blogs-admin/src/main/resources/db/schema.sql` | ✅ 已并入三张表（`admin_user` / `article` / `category`），dev 启动自动执行 |
 | `sql/schema.sql`（仓库根，未跟踪） | 三张表齐全，已与实体逐字段核对一致 |
 
-**结论**：dev 启动自动建表只能建出 `admin_user`。要么把 `sql/schema.sql` 的 `article` / `category` 段并入 `db/schema.sql`，要么手动执行一次 `sql/schema.sql`。**不处理会导致文章/分类接口报表不存在。**
+**结论**：2026-10-30 起 `db/schema.sql` 已含三表，dev 启动一次即可建全，无需再手工执行 `sql/schema.sql`。
+实测 `SHOW TABLES` 输出 `admin_user`、`article`、`category`。
 
 ---
 
@@ -278,9 +279,12 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 
 | 方法 | 路径 | 说明 | 关键参数 |
 | --- | --- | --- | --- |
-| ⬜ GET | `/api/v1/articles` | 分页，**仅 `status=1`**，按 `isTop` 降序 + `created_at` 降序 | `pageNum`、`pageSize`、`categoryId`、`keyword`（标题/摘要模糊） |
-| ⬜ GET | `/api/v1/articles/{id}` | 已发布文章详情，**`viewCount` +1**；草稿/下架返回 404 | 路径参数 `id` |
-| ⬜ GET | `/api/v1/categories` | 分类列表（扁平数组，非分页），按 `sort_order` 升序 | 无 |
+| ✅ GET | `/api/v1/articles` | 分页，**仅 `status=1`**，按 `isTop` 降序 + `created_at` 降序 | `pageNum`、`pageSize`、`categoryId`、`keyword`（标题/摘要模糊） |
+| ✅ GET | `/api/v1/articles/{id}` | 已发布文章详情，**`viewCount` +1**；草稿/下架返回 404 | 路径参数 `id` |
+| ✅ GET | `/api/v1/categories` | 分类列表（扁平数组，非分页），按 `sort_order` 升序 | 无 |
+
+> 公开接口 2026-10-30 已实现（`PublicArticleController` / `PublicCategoryController`），
+> 复核与验证记录见 `docs/AUTH_REVIEW_AND_PUBLIC_API.md`。
 
 **列表项 `data.list[]` 元素**（**不含** `contentMd` / `contentHtml`，减小传输量）：
 
@@ -317,15 +321,20 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| ⬜ GET | `/api/v1/admin/articles` | 分页，**含草稿/下架**，支持 `status` 筛选 |
-| ⬜ GET | `/api/v1/admin/articles/{id}` | 单篇详情（含草稿/下架），编辑回填用 |
-| ⬜ POST | `/api/v1/admin/articles` | 创建（可草稿/发布） |
-| ⬜ PUT | `/api/v1/admin/articles/{id}` | 更新 |
-| ⬜ DELETE | `/api/v1/admin/articles/{id}` | 逻辑删除 |
-| ⬜ GET | `/api/v1/admin/categories` | 分类列表（管理端） |
-| ⬜ POST | `/api/v1/admin/categories` | 创建分类 |
-| ⬜ PUT | `/api/v1/admin/categories/{id}` | 更新分类 |
-| ⬜ DELETE | `/api/v1/admin/categories/{id}` | 逻辑删除 |
+| ✅ GET | `/api/v1/admin/articles` | 分页，**含草稿/下架**，支持 `status` 筛选；列表**不返回正文**（排除 `content_md`/`content_html`/`ai_summary`） |
+| ✅ GET | `/api/v1/admin/articles/{id}` | 单篇详情（含草稿/下架），返回 `contentMd`+`contentHtml`，编辑回填用 |
+| ✅ POST | `/api/v1/admin/articles` | 创建（可草稿/发布），返回新文章 ID |
+| ✅ PUT | `/api/v1/admin/articles/{id}` | 更新，返回空响应体 |
+| ✅ DELETE | `/api/v1/admin/articles/{id}` | 逻辑删除，返回空响应体 |
+| ✅ GET | `/api/v1/admin/categories` | 分类列表（管理端，`sortOrder ASC`） |
+| ✅ POST | `/api/v1/admin/categories` | 创建分类，返回新分类 ID |
+| ✅ PUT | `/api/v1/admin/categories/{id}` | 更新分类，返回空响应体 |
+| ✅ DELETE | `/api/v1/admin/categories/{id}` | 逻辑删除；**有文章引用时拒绝**并提示篇数 |
+
+> 管理端接口 2026-11-03 已按 `docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md` 施工单对齐
+> （`AdminArticleController` / `AdminCategoryController`）。关键设计（公开/管理端 DTO 与 VO 隔离、
+> 列表排除正文大字段、`contentHtml` 后端渲染、分类删除拒绝）与 10 项验收记录见
+> `docs/ADMIN_API_IMPLEMENTATION.md`。
 
 **文章创建/更新请求体**：
 
@@ -415,12 +424,12 @@ public class JacksonConfig {
 
 | # | 事项 | 建议 | 影响 |
 | --- | --- | --- | --- |
-| 1 | `contentHtml` 由谁生成 | **后端渲染**（`commonmark-java`），前端只提交 `contentMd` | 决定是否引入渲染依赖 |
-| 2 | 分类删除时文章 `categoryId` 如何处理 | **置空**（`categoryId = null`），不阻止删除 | 影响删除逻辑与前端提示 |
+| 1 | `contentHtml` 由谁生成 | ✅ 已决策：**后端渲染**（`commonmark-java` 0.22.0），前端只提交 `contentMd`；正文内联 HTML 按 `escapeHtml(true)` 转义，与前端 `markdown.js` 一致 | 已落地于 `MarkdownRenderer` |
+| 2 | 分类删除时文章 `categoryId` 如何处理 | ✅ 已决策（2026-11-03 按施工单改判）：**有文章引用则拒绝删除**并提示篇数，既不级联删文章也不静默置空；有子分类时同样拒绝 | 已落地于 `CategoryServiceImpl#deleteCategory` |
 | 3 | 分类是否需要树形接口 | MVP 先扁平，前端自行组装 | 影响 `GET /categories` 响应结构 |
 | 4 | `publishedAt` 是否补字段 | 暂不补，用 `createdAt` | 影响详情/列表 VO |
-| 5 | 时间格式统一方案 | 按第五节加 Jackson 配置 | 影响全部含时间的响应 |
-| 6 | 全表建表脚本落地方式 | 并入 `db/schema.sql` 让 dev 自动建全表 | 影响本地启动能否一次跑通 |
+| 5 | 时间格式统一方案 | ✅ 已落地 `JacksonConfig`（`yyyy-MM-dd HH:mm:ss`） | 影响全部含时间的响应 |
+| 6 | 全表建表脚本落地方式 | ✅ 已并入 `db/schema.sql`，dev 自动建全表 | 影响本地启动能否一次跑通 |
 
 ---
 

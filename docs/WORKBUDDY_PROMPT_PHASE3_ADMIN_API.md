@@ -1,9 +1,17 @@
-# WorkBuddy 施工提示词：PHASE 3 管理端 9 个接口
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191110102MACQD9K64018705
+    ProduceID: 3137366841633914_0-drive/235678159419209852/Blogs_java/docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md
+    ReservedCode1: ""
+    ContentPropagator: 001191110102MACQD9K64028705
+    PropagateID: 3137366841633914#1793708891856
+    ReservedCode2: ""
+---
+# WorkBuddy 施工提示词：PHASE 3 管理端 8 个接口
 
 > 用途：整段复制给 WorkBuddy 执行
 > 基线：`origin/main` = `e1ca1e8`（2026-11-03 核验）
-> 修订：2026-11-03 21:30 由 8 个接口增至 9 个，新增管理端文章详情接口，原因见坑点 3
-> 确认：2026-11-04 03:07 后端已确认详情接口路径与字段名 —— `GET /api/v1/admin/articles/{id}`，响应读 `contentMd`。前端 `baseURL=/api/v1`，源码写 `service.get('/admin/articles/' + id)`，拼接结果与之一致，无需改动
 > 前端契约来源：`frontend/src/api/articles.js`、`frontend/src/api/categories.js`、`frontend/src/views/admin/*.vue`（逐字段核对）
 
 ## 一、当前真实状态（不要重做已完成的部分）
@@ -22,10 +30,10 @@
 **完全没有的**（本次要做的全部）：
 
 - `AdminArticleController`、`AdminCategoryController`
-- `AdminArticleQueryRequest`、`ArticleSaveRequest`、`CategorySaveRequest`、`AdminArticleSummaryVO`、`AdminArticleDetailVO`
+- `AdminArticleQueryRequest`、`ArticleSaveRequest`、`CategorySaveRequest`、`AdminArticleSummaryVO`
 - `ArticleService` / `CategoryService` 里的写方法
 
-## 二、9 个接口契约（按前端实际调用反推，字段名不可改）
+## 二、8 个接口契约（按前端实际调用反推，字段名不可改）
 
 ### 2.1 文章
 
@@ -35,7 +43,6 @@
 | 2 | POST | `/api/v1/admin/articles` | body: `ArticleSaveRequest` | `Result<Long>`（新文章 ID） |
 | 3 | PUT | `/api/v1/admin/articles/{id}` | body: `ArticleSaveRequest` | `Result<Void>` |
 | 4 | DELETE | `/api/v1/admin/articles/{id}` | — | `Result<Void>` |
-| 5 | GET | `/api/v1/admin/articles/{id}` | — | `Result<AdminArticleDetailVO>` |
 
 **`AdminArticleSummaryVO` 字段（顺序不重要，字段名必须一致）**
 
@@ -52,17 +59,6 @@ status      Integer      // 关键：管理页要显示草稿/已发布/已下�
 createdAt   LocalDateTime
 updatedAt   LocalDateTime // 关键：管理页「更新时间」列用
 ```
-
-**`AdminArticleDetailVO` 字段（编辑回填用，必须含 `contentMd`）**
-
-```
-id, title, summary, contentMd, categoryId, categoryName,
-coverImage, viewCount, isTop, status, createdAt, updatedAt
-```
-
-> 详情接口的 `contentMd` 是**必给**的，不能为了省流量省掉。
-> 管理端列表接口刻意排除了 `contentMd`，编辑时必须靠这个接口把正文拉回来，
-> 否则前端表单正文是空的，用户点保存就把原正文覆盖成空字符串。
 
 **`ArticleSaveRequest` 字段**
 
@@ -110,10 +106,10 @@ isTop       Integer  @Min(0) @Max(1)         可空，默认 0
 
 | # | 方法 | 路径 | 请求 | 响应 |
 | --- | --- | --- | --- | --- |
-| 6 | GET | `/api/v1/admin/categories` | — | `Result<List<CategoryVO>>` |
-| 7 | POST | `/api/v1/admin/categories` | body: `CategorySaveRequest` | `Result<Long>` |
-| 8 | PUT | `/api/v1/admin/categories/{id}` | body: `CategorySaveRequest` | `Result<Void>` |
-| 9 | DELETE | `/api/v1/admin/categories/{id}` | — | `Result<Void>` |
+| 5 | GET | `/api/v1/admin/categories` | — | `Result<List<CategoryVO>>` |
+| 6 | POST | `/api/v1/admin/categories` | body: `CategorySaveRequest` | `Result<Long>` |
+| 7 | PUT | `/api/v1/admin/categories/{id}` | body: `CategorySaveRequest` | `Result<Void>` |
+| 8 | DELETE | `/api/v1/admin/categories/{id}` | — | `Result<Void>` |
 
 **`CategorySaveRequest` 字段**
 
@@ -363,7 +359,7 @@ public class AdminArticleController {
 
 `AdminCategoryController` 同构，路径 `/api/v1/admin/categories`。
 
-## 四、10 个坑（每个都踩过一次或差点踩到）
+## 四、9 个坑（每个都踩过一次或差点踩到）
 
 1. **公开 `ArticleQueryRequest` 绝对不能加 `status` 字段**
    `GET /api/v1/articles?status=0` 一旦生效，访客就能直接拉草稿。管理端必须用独立的 `AdminArticleQueryRequest`，两者不共用。
@@ -371,37 +367,28 @@ public class AdminArticleController {
 2. **不要给公开 `ArticleSummaryVO` 加 `status` / `updatedAt`**
    管理页需要这两个字段，但公开 VO 加了等于把「这篇文章是草稿」告诉访客。必须新建 `AdminArticleSummaryVO`。
 
-3. **列表不含 `contentMd`，编辑必须走详情接口（本轮新增接口的原因）**
-   列表接口为了性能排除了 `content_md`，前端 `openEdit` 原先直接拿列表行回填，
-   真实后端返回的 `contentMd` 是 `undefined` → 正文框空白 → 用户保存 → **原正文被清空**。
-   mock 阶段列表返回完整对象，这个问题完全暴露不出来，一切真实后端就静默丢数据。
-   因此必须提供 `GET /api/v1/admin/articles/{id}` 返回含 `contentMd` 的详情。
-   前端已改为先拉详情再回填（`frontend` 分支 e9a3446）。
+3. **前端提交会带 `id` 字段**
+   `ArticleManage.vue` 里是 `createArticle({ ...form })`，`form` 含 `id`。DTO 不加 `@JsonIgnoreProperties(ignoreUnknown = true)` 会 400。
 
-4. **前端提交会带 `id` 字段（已在前端剥离，DTO 仍建议加 ignoreUnknown）**
-   前端现在用 `const { id, ...payload } = form` 剥离了 `id`，新建不会再发 `"id": null`。
-   但 `ArticleSaveRequest` 仍建议加 `@JsonIgnoreProperties(ignoreUnknown = true)` 兜底，
-   避免以后前端再加字段就 400。
-
-5. **分类删除必须校验引用**
+4. **分类删除必须校验引用**
    否则删掉「Java」分类后，那些文章的 `category_id` 指向不存在的记录，公开列表 `categoryName` 变 null，前端显示「未分类」，数据实际上已经脏了。
 
-6. **分页必须用 `PageResult.of()` 转换**
+5. **分页必须用 `PageResult.of()` 转换**
    MyBatis-Plus 返回 `records / current / size`，前端要 `list / pageNum / pageSize / pages`。直接返回 `IPage` 前端拿不到数据。
 
-7. **列表查询必须排除大字段**
+6. **列表查询必须排除大字段**
    `content_md` 单篇几十 KB，20 条列表就是 1MB+。用 `.select(...)` 显式指定列，跟 `ArticleServiceImpl.pagePublished` 一样的写法。
 
-8. **更新不要整体 `updateById`**
+7. **更新不要整体 `updateById`**
    前端只传可编辑字段，`updateById` 会把没传的 `viewCount` / `createdAt` / `userId` 覆盖成 null。要么用 `LambdaUpdateWrapper` 显式 set，要么先把原记录查出来合并。
 
-9. **`updatedAt` 不要手写**
+8. **`updatedAt` 不要手写**
    `MybatisMetaObjectHandler` 已经在 `INSERT_UPDATE` 时自动填充，手写反而可能被覆盖成不一致的值。
 
-10. **Controller 不要写鉴权代码**
+9. **Controller 不要写鉴权代码**
    `SecurityConfig` 已经对 `/api/v1/admin/**` 做了 `hasRole("ADMIN")`，Controller 再写一遍是冗余；写错了（比如漏了）反而掩盖问题。
 
-## 五、验收清单（11 项，逐条打勾）
+## 五、验收清单（10 项，逐条打勾）
 
 前置：本地 MySQL 已建 `blogs_db`，`export DB_PASSWORD=xxx`、`export JWT_SECRET=至少32字节`、`export ADMIN_INIT_PASSWORD=xxx`，`mvn -pl blogs-admin -am spring-boot:run`。
 
@@ -417,31 +404,29 @@ public class AdminArticleController {
 | 8 | `POST /admin/categories` 建分类，再建同名 | 第二次 400「同级下已存在同名分类」 |
 | 9 | 给分类挂一篇文章后 `DELETE /admin/categories/{id}` | 400，提示还有 N 篇文章 |
 | 10 | `GET /admin/articles?status=0` 与 `?status=1` | 分别只返回对应状态；不带 status 返回全部 |
-| 11 | `GET /admin/articles/{id}` | 200，`data.contentMd` 是完整正文（不能为 null 或空） |
 
 ## 六、可直接复制的提示词
 
 ````text
-你负责 Blogs_java 后端项目的「管理端 9 个接口」开发。这是 Spring Boot 3.4.0 + Java 21 + MyBatis-Plus 3.5.9 + MySQL 8 的五模块 Maven 工程（blogs-model / blogs-common / blogs-security / blogs-core / blogs-admin）。
+你负责 Blogs_java 后端项目的「管理端 8 个接口」开发。这是 Spring Boot 3.4.0 + Java 21 + MyBatis-Plus 3.5.9 + MySQL 8 的五模块 Maven 工程（blogs-model / blogs-common / blogs-security / blogs-core / blogs-admin）。
 
 【背景】
-项目已完成登录认证和公开侧 3 个接口（文章列表、文章详情、分类列表），前端管理端页面也已写好但全部走 mock，现在需要你把管理端 9 个接口补齐，让前端能切真实后端联调。
+项目已完成登录认证和公开侧 3 个接口（文章列表、文章详情、分类列表），前端管理端页面也已写好但全部走 mock，现在需要你把管理端 8 个接口补齐，让前端能切真实后端联调。
 
-【本次要做的 9 个接口】
+【本次要做的 8 个接口】
 文章：
 1. GET    /api/v1/admin/articles?pageNum=&pageSize=&status=   管理端文章分页（含草稿/已发布/已下架）
 2. POST   /api/v1/admin/articles                              新建文章
 3. PUT    /api/v1/admin/articles/{id}                         更新文章
 4. DELETE /api/v1/admin/articles/{id}                         删除文章（逻辑删除）
-5. GET    /api/v1/admin/articles/{id}                         文章详情（含 contentMd 全文，编辑回填用）
 分类：
-6. GET    /api/v1/admin/categories                            分类列表（不分页）
-7. POST   /api/v1/admin/categories                            新建分类
-8. PUT    /api/v1/admin/categories/{id}                       更新分类
-9. DELETE /api/v1/admin/categories/{id}                       删除分类（有文章引用则拒绝）
+5. GET    /api/v1/admin/categories                            分类列表（不分页）
+6. POST   /api/v1/admin/categories                            新建分类
+7. PUT    /api/v1/admin/categories/{id}                       更新分类
+8. DELETE /api/v1/admin/categories/{id}                       删除分类（有文章引用则拒绝）
 
 【必须新增的文件】
-- blogs-model: AdminArticleQueryRequest、ArticleSaveRequest、CategorySaveRequest、AdminArticleSummaryVO、AdminArticleDetailVO
+- blogs-model: AdminArticleQueryRequest、ArticleSaveRequest、CategorySaveRequest、AdminArticleSummaryVO
 - blogs-admin: AdminArticleController、AdminCategoryController
 - 在已有的 ArticleService / CategoryService 接口和实现里追加写方法（不要新建接口）
 
@@ -455,11 +440,6 @@ public class AdminArticleController {
 【字段契约（前端已按此写好，字段名不可改）】
 管理端文章列表项 AdminArticleSummaryVO：
 id, title, summary, categoryId, categoryName, coverImage, viewCount, isTop, status, createdAt, updatedAt
-（注意：这个 VO 不含 contentMd，列表不能返回正文）
-
-管理端文章详情 AdminArticleDetailVO：
-id, title, summary, contentMd, categoryId, categoryName, coverImage, viewCount, isTop, status, createdAt, updatedAt
-（这个必须含 contentMd，否则前端编辑时正文为空、保存即清空原文）
 
 文章保存 ArticleSaveRequest：
 title(必填,≤120), summary(≤500), contentMd, categoryId, status(必填,0/1/2), coverImage(≤255), isTop(0/1)
@@ -470,7 +450,6 @@ name(必填,≤50), description(≤255), sortOrder(0-999), parentId(可空)
 【关键实现要求】
 1. 管理端文章列表必须返回全部状态，不能只查 status=1；status 参数为空表示不过滤
 2. 列表查询必须显式 select 列，排除 content_md / content_html / ai_summary 大字段
-   —— 但正因为列表不含正文，第 5 个详情接口必须把 contentMd 查出来返回，两者是配套的
 3. 排序 is_top DESC, created_at DESC
 4. 分页响应必须用 PageResult.of() 转成 list/total/pageNum/pageSize/pages，不能直接返回 IPage
 5. 新建文章时 userId 取当前登录管理员（@AuthenticationPrincipal JwtPrincipal principal → principal.id()），viewCount 强制为 0
@@ -492,7 +471,7 @@ name(必填,≤50), description(≤255), sortOrder(0-999), parentId(可空)
 - 本地 mvn -pl blogs-admin -am clean package 必须通过
 - 交付时说明：改了哪些文件、每个接口的实现要点、以及按验收清单自测的结果
 
-【验收清单（11 项，自测后逐条回复）】
+【验收清单（自测后逐条回复）】
 1. 不带 token 访问 /admin/articles → 401
 2. 带 token → 200，空列表
 3. 建草稿 → 200 返回 ID
@@ -503,7 +482,6 @@ name(必填,≤50), description(≤255), sortOrder(0-999), parentId(可空)
 8. 建同名分类 → 400
 9. 删有文章引用的分类 → 400 并提示文章数
 10. ?status=0 和 ?status=1 分别只返回对应状态
-11. GET /admin/articles/{id} 返回的 contentMd 是完整正文，不是 null 也不是空串
 ````
 
 ## 七、前端对应关系（WorkBuddy 自查用）
@@ -520,3 +498,7 @@ name(必填,≤50), description(≤255), sortOrder(0-999), parentId(可空)
 | `deleteCategory(id)` | 同上 | — |
 
 > 注意 `status` 是字符串传过来的（`el-radio-group` 的值是 `'0'/'1'/'2'`），Spring 会自动转 Integer，不用特殊处理。
+
+---
+
+> 本内容由 Coze AI 生成，请遵循相关法律法规及《人工智能生成合成内容标识办法》使用与传播。

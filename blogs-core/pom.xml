@@ -38,11 +38,10 @@
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- 测试：JUnit 5 + Mockito + AssertJ，版本由 spring-boot-starter-parent 管理 -->
+        <!-- Markdown 渲染：保存文章时把 contentMd 转成 contentHtml，避免把渲染职责推给前端 -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
+            <groupId>org.commonmark</groupId>
+            <artifactId>commonmark</artifactId>
         </dependency>
     </dependencies>
 </project>
