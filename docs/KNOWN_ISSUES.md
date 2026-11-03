@@ -28,7 +28,7 @@
   - 本轮采用：`BlogsApplication` 加显式 `@ComponentScan` + `REGEX` 排除 `*Application`，**零删除**规避；删除动作待负责人授权
 - **状态**：🔧 本轮规避；删除待授权
 
-### P0-3 管理端 8 个接口零实现
+### P0-3 管理端 9 个接口零实现
 
 - **位置**：`blogs-admin/controller/`（无 AdminArticleController / AdminCategoryController）、`ArticleService` / `CategoryService`（无写方法）
 - **影响**：前端管理端文章 / 分类页面全部 404，只能跑 mock；PHASE 3 无法收口
@@ -71,6 +71,23 @@
 - **影响**：管理页要显示「草稿 / 已发布 / 已下架」和「更新时间」，公开 VO 提供不了
 - **修复**：新建 `AdminArticleSummaryVO`（加 status + updatedAt），**不得给公开 `ArticleSummaryVO` 加 status**，否则管理端字段污染公开接口
 - **状态**：📋 已写入施工单
+
+### P1-5 多级分类存在跨层成环风险（后端 2026-11-04 反馈）
+
+- **位置**：`CategoryService` 更新分类时的父分类校验
+- **现状**：已拦截「父分类是自己」和「父分类不存在」两种情况，但 **A→B→A 这类跨层成环未做递归校验**
+- **影响**：MVP 前端不提供父子分类选择（分类表单只有 name/description/sortOrder，不传 parentId），所以当前**触发不到**；一旦开放多级编辑，成环会让分类树渲染无限递归或直接栈溢出
+- **修复方案**：更新分类前从目标 `parentId` 沿 `parent_id` 向上回溯，若回溯路径中出现当前分类 ID 则判定成环，抛 `BusinessException(ResultCode.BAD_REQUEST, "不能把分类移动到自己的子分类下")`；同时加回溯深度上限（如 10 层）防脏数据导致死循环
+- **状态**：📅 开放多级分类编辑前必须补，当前不阻塞
+
+### P1-6 管理端 401/403 缺少 MockMvc 链路级测试（后端 2026-11-04 反馈）
+
+- **位置**：`blogs-admin/src/test/java/com/xdl/blogsadmin/unit/`
+- **现状**：已有 `RestSecurityExceptionHandlerTest` 覆盖 401/403 的**响应体格式**，但那是直接调用异常处理器，**没有走真实的 Security filter chain**
+- **为什么现在补不了**：`@WebMvcTest(controllers = AdminArticleController.class)` 依赖 Controller 类存在，而管理端 Controller 尚在后端本地开发中、未进仓库
+- **已做的替代**：新增 `PublicApiContractTest`（反射断言公开 DTO 无 status、公开 VO 无 status/updatedAt、详情 VO 带 contentMd），把最容易出安全事故的三条约定锁死
+- **待补**：管理端 Controller 合并后，补 `@WebMvcTest` + `@Import(SecurityConfig.class)` 的 401/403 断言，三条回归线为「公开不带 status」「管理端 401/403」「草稿隔离」
+- **状态**：🔒 依赖 P0-3（管理端接口）合并
 
 ## P2（体验 / 维护）
 
@@ -115,8 +132,8 @@
 
 - **位置**：`tag` 表不存在；`ArticleQueryRequest` 无 `tagId`；`SecurityConfig` 已放行 `/tags/**` 但无对应 Controller
 - **影响**：前端 `ArticleList.vue` 已把标签筛选置 `tagFilterEnabled = false` 降级隐藏
-- **修复**：阶段 3 排期（建表 + 3 接口 + 文章标签关联）
-- **状态**：📅 阶段 3 排期
+- **修复**：表结构与接口契约已定稿，见 `docs/PHASE3_TAG_DESIGN.md`（tag / article_tag 两张表、公开 2 + 管理端 7 个接口、绑定规则）
+- **状态**：📐 设计已定稿，等管理端主链路交付后排期落地
 
 ## 附：本轮修复清单（2026-11-03）
 
@@ -126,8 +143,17 @@
 | P0-2 | 冗余启动类 | 显式 `@ComponentScan` 排除，零删除 |
 | P1-1 | 无 actuator | 加依赖 + 只暴露 health |
 | P1-2 | 无测试依赖 | 父 pom + admin 模块引入 |
-| P1-3 | 无认证测试 | 新增 `AuthSecurityTest` |
+| P1-3 | 无认证测试 | 新增 9 个测试类（4 纯单元 + 5 改造），另补 `PublicApiContractTest` 锁公开契约 |
 | P2-2 | PHASE_4 写 TS | 文档修订 |
 | P2-3 | 生产开 SQL 日志 | 移到 dev profile |
 
-**未处理（需授权 / 待决策）**：P0-4 PAT 吊销、P0-3 管理端接口（已出施工单）、P2-1 删 `application.txt`、P3-1 `sql/` 目录去向、P0-2 删除动作。
+**2026-11-04 增量（响应后端反馈）**：
+
+| 编号 | 事项 | 处理 |
+| --- | --- | --- |
+| 前端 P0 | `openEdit` 用列表行回填导致正文被清空 | ✅ 已修（前端 e9a3446）：新增 `GET /admin/articles/{id}` 详情接口 + 先拉详情再回填 |
+| P1-5 | 多级分类跨层成环未校验 | 📅 已记录，开放多级编辑前必须补 |
+| P1-6 | 管理端 401/403 缺 MockMvc 链路测试 | 🔒 阻塞于管理端 Controller 未进仓库，先以反射契约测试替代 |
+| P3-3 | 标签表结构未定 | 📐 已定稿 `docs/PHASE3_TAG_DESIGN.md` |
+
+**未处理（需授权 / 待决策）**：P0-4 PAT 吊销、P0-3 管理端接口（已出施工单，后端本地开发中）、P2-1 删 `application.txt`、P3-1 `sql/` 目录去向、P0-2 删除动作。
