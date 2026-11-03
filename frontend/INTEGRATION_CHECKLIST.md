@@ -2,7 +2,7 @@
 
 > 适用：开发者在**自己电脑**上跑通「前端 → 真实后端」全链路。
 > 基线：后端 main 已含登录/me + 公开侧 3 个接口（文章列表、文章详情、分类列表）。
-> **管理端 8 个接口尚未实现**（契约见 `docs/BACKEND_HANDOFF_WORKBUDDY_ADMIN_API.md`），第 5 节管理端验证需等后端交付后再执行。
+> **管理端 9 个接口尚未实现**（契约见 `docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md`），第 5 节管理端验证需等后端交付后再执行。
 > 注意：Agent 云端环境访问不到你本机 `localhost:8080`，本清单由你本机执行。
 
 ## 0. 准备
@@ -78,7 +78,7 @@ curl -s "http://localhost:8080/api/v1/articles?pageNum=1&pageSize=10&keyword=Vue
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6   # 期望 404
 ```
 
-## 5. 管理端 8 个接口（⚠️ 待后端交付后执行）
+## 5. 管理端 9 个接口（⚠️ 待后端交付后执行）
 
 全部需要 `Authorization: Bearer $TOKEN`；不带 token → 401，非管理员 → 403。
 
@@ -90,15 +90,16 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6
 | ② | `POST /api/v1/admin/articles` | body `{title, summary, contentMd, categoryId, status, coverImage, isTop}`；返回 data 为 id（Long） |
 | ③ | `PUT /api/v1/admin/articles/{id}` | body 同上；200；改 status=1 后公开列表能搜到 |
 | ④ | `DELETE /api/v1/admin/articles/{id}` | 200（逻辑删除）；删除后管理列表消失、公开详情 404 |
+| ⑤ | `GET /api/v1/admin/articles/{id}` | 200；**`data.contentMd` 必须是完整正文**。这条不通过会导致「编辑文章保存后正文被清空」——列表接口不含正文，编辑必须靠它回填 |
 
 ### 5.2 分类 CRUD
 
 | # | 接口 | 验证点 |
 | --- | --- | --- |
-| ⑤ | `GET /api/v1/admin/categories` | 返回扁平数组，字段 id/name/parentId/description/sortOrder，按 sortOrder 升序 |
-| ⑥ | `POST /api/v1/admin/categories` | body `{name, description, sortOrder}`；200 |
-| ⑦ | `PUT /api/v1/admin/categories/{id}` | body 同上；200 |
-| ⑧ | `DELETE /api/v1/admin/categories/{id}` | 该分类下**还有文章**时返回业务错误（如「该分类下还有 N 篇文章」），**不是 500**；无文章时 200 |
+| ⑥ | `GET /api/v1/admin/categories` | 返回扁平数组，字段 id/name/parentId/description/sortOrder，按 sortOrder 升序 |
+| ⑦ | `POST /api/v1/admin/categories` | body `{name, description, sortOrder}`；200 |
+| ⑧ | `PUT /api/v1/admin/categories/{id}` | body 同上；200 |
+| ⑨ | `DELETE /api/v1/admin/categories/{id}` | 该分类下**还有文章**时返回业务错误（如「该分类下还有 N 篇文章」），**不是 500**；无文章时 200 |
 
 curl 示例：
 
@@ -120,11 +121,12 @@ curl -s -X POST http://localhost:8080/api/v1/admin/articles \
 | 管理端列表 status 列全「未知」 | 后端 VO 未返回 status | 确认后端用 `AdminArticleSummaryVO`（含 status + updatedAt），公开 VO 不要加 |
 | 时间显示 NaN-NaN | 后端时间格式不是 `yyyy-MM-dd HH:mm:ss` | 后端已配 JacksonConfig 统一格式；如仍异常检查是否有 @JsonFormat 覆盖 |
 | 分类删除 500 | 删除前未校验引用 | 后端必须按契约先 count 引用文章再删，有引用抛业务异常 |
+| **编辑文章正文框空白、保存后原文丢失** | 管理端详情接口缺失或未返回 contentMd | 前端编辑已改为先调 `GET /admin/articles/{id}` 拉全文（e9a3446）；若仍空白，检查该接口是否返回了 contentMd |
 
 ## 7. 联调完成标准
 
 - [ ] 登录成功拿 token，刷新页面登录态保持（/auth/me 生效）
 - [ ] 公开列表：分页 / 关键词 / 分类筛选正常，草稿 404，详情阅读数 +1
-- [ ] 管理端文章 4 接口全通（含 status 筛选、新建后公开可见、逻辑删除生效）
+- [ ] 管理端文章 5 接口全通（含 status 筛选、详情回填正文、新建后公开可见、逻辑删除生效）
 - [ ] 管理端分类 4 接口全通（含删除引用校验）
 - [ ] 前端切 mock（删掉 .env.local 或 VITE_USE_MOCK=true）后回退正常
