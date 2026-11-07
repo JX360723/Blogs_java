@@ -5,6 +5,7 @@ import com.xdl.model.dto.AdminArticleQueryRequest;
 import com.xdl.model.dto.ArticleQueryRequest;
 import com.xdl.model.dto.ArticleSaveRequest;
 import com.xdl.model.entity.Article;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.AdminArticleSummaryVO;
 import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.ArticleSummaryVO;
@@ -52,16 +53,20 @@ public interface ArticleService extends IService<Article> {
     PageResult<AdminArticleSummaryVO> pageForAdmin(AdminArticleQueryRequest query);
 
     /**
-     * 管理端文章详情：草稿与已下架同样可查看，供编辑回填正文
+     * 管理端文章详情：草稿与已下架同样可查看，供编辑回填正文与状态
      * <p>
      * 附带接口：施工单的 8 个接口未包含详情，但管理页「编辑」需要正文。
      * 列表为控制响应体积不返回 contentMd，编辑前应调用本接口取回正文，
      * 否则提交时会用空串覆盖原文。
+     * <p>
+     * 返回管理端专用 VO 而非公开的 {@link ArticleDetailVO}：
+     * 公开 VO 刻意不含 {@code status}，编辑表单拿不到真实状态会把「已发布」
+     * 回填成「草稿」，用户改个错别字保存，文章就从公开列表消失。
      *
      * @param id 文章ID
-     * @return 文章详情（含 contentMd 与 contentHtml）
+     * @return 管理端文章详情（含 contentMd 与 status）
      */
-    ArticleDetailVO getAdminDetail(Long id);
+    AdminArticleDetailVO getAdminDetail(Long id);
 
     /**
      * 创建文章

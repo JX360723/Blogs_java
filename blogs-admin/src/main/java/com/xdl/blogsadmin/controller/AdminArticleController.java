@@ -5,8 +5,8 @@ import com.xdl.blogscommon.result.Result;
 import com.xdl.blogscore.service.ArticleService;
 import com.xdl.model.dto.AdminArticleQueryRequest;
 import com.xdl.model.dto.ArticleSaveRequest;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.AdminArticleSummaryVO;
-import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.PageResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -52,16 +52,20 @@ public class AdminArticleController {
     }
 
     /**
-     * 查询文章详情（含草稿与已下架），供编辑回填正文
+     * 查询文章详情（含草稿与已下架），供编辑回填正文与状态
      * <p>
      * 附加接口：列表为控制响应体积不返回 {@code contentMd}，
      * 前端打开编辑弹窗时应先调本接口取回正文，否则提交时会把正文覆盖成空串。
+     * <p>
+     * 返回 {@link AdminArticleDetailVO} 而不是公开侧的 {@code ArticleDetailVO}：
+     * 公开 VO 刻意不含 {@code status}，编辑表单拿不到真实状态会把「已发布」回填成「草稿」，
+     * 用户改个错别字保存，文章就从公开列表消失。
      *
      * @param id 文章ID
-     * @return 文章详情，含 contentMd 与渲染后的 contentHtml
+     * @return 管理端文章详情，含 contentMd 与 status
      */
     @GetMapping("/{id}")
-    public Result<ArticleDetailVO> detail(@PathVariable Long id) {
+    public Result<AdminArticleDetailVO> detail(@PathVariable Long id) {
         return Result.success(articleService.getAdminDetail(id));
     }
 

@@ -28,12 +28,14 @@
   - 本轮采用：`BlogsApplication` 加显式 `@ComponentScan` + `REGEX` 排除 `*Application`，**零删除**规避；删除动作待负责人授权
 - **状态**：🔧 本轮规避；删除待授权
 
-### P0-3 管理端 9 个接口零实现
+### P0-3 管理端 9 个接口（已实现，遗留详情 VO 缺 status，本轮修复）
 
-- **位置**：`blogs-admin/controller/`（无 AdminArticleController / AdminCategoryController）、`ArticleService` / `CategoryService`（无写方法）
+- **位置**：`blogs-admin/controller/AdminArticleController`、`AdminCategoryController`、`ArticleServiceImpl`、`CategoryServiceImpl`
 - **影响**：前端管理端文章 / 分类页面全部 404，只能跑 mock；PHASE 3 无法收口
-- **修复**：交 WorkBuddy，按 `docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md` 施工
-- **状态**：📋 已出施工单，待 WorkBuddy 执行
+- **进展**：2026-11-07 后端已将 9 个接口全部实现并合并进 `main`（提交 `afe5aa6`），含 Markdown 渲染、contentHtml 同步、分类引用校验、逻辑删除
+- **遗留缺陷（本轮修复）**：详情接口 `GET /api/v1/admin/articles/{id}` 返回的是公开侧 `ArticleDetailVO`，该 VO 刻意不含 `status`。前端 `openEdit` 里 `status: detail.status ?? 0` 恒为 0，编辑一篇**已发布**文章时状态单选回填成「草稿」，用户改个错别字保存后 `PUT` 提交 `status=0`，文章立刻从公开列表消失，页面上无任何报错
+- **修复**：新增 `AdminArticleDetailVO`（含 `status`），管理端详情改返回它；公开 `ArticleDetailVO` 保持不含 `status` 不变
+- **状态**：✅ 本轮修复，`AdminArticleServiceImplTest` 锁死回归
 
 ### P0-4 GitHub PAT 明文出现在群聊
 
@@ -65,12 +67,12 @@
 - **修复**：本轮补 `AuthSecurityTest`（MockMvc，不依赖真实数据库：用 `@WebMvcTest` + MockBean 隔离，或 `@SpringBootTest` + H2 —— 本轮采用**不启动上下文的分层测试**，见 P1-3 实现说明）
 - **状态**：🔧 本轮修复
 
-### P1-4 管理端列表 VO 缺 status / updatedAt
+### P1-4 管理端列表 VO 缺 status / updatedAt（已解决）
 
-- **位置**：`ArticleSummaryVO` 字段 = id/title/summary/categoryId/categoryName/coverImage/viewCount/isTop/createdAt
-- **影响**：管理页要显示「草稿 / 已发布 / 已下架」和「更新时间」，公开 VO 提供不了
-- **修复**：新建 `AdminArticleSummaryVO`（加 status + updatedAt），**不得给公开 `ArticleSummaryVO` 加 status**，否则管理端字段污染公开接口
-- **状态**：📋 已写入施工单
+- **位置**：`ArticleSummaryVO`
+- **影响**：管理页无法区分草稿 / 已发布，也无法展示更新时间
+- **修复**：后端新增独立 `AdminArticleSummaryVO`（含 `status`、`updatedAt`），公开 VO 保持不含
+- **状态**：✅ 2026-11-07 随管理端接口实现一并解决
 
 ### P1-5 多级分类存在跨层成环风险（后端 2026-11-04 反馈）
 
@@ -87,7 +89,7 @@
 - **为什么现在补不了**：`@WebMvcTest(controllers = AdminArticleController.class)` 依赖 Controller 类存在，而管理端 Controller 尚在后端本地开发中、未进仓库
 - **已做的替代**：新增 `PublicApiContractTest`（反射断言公开 DTO 无 status、公开 VO 无 status/updatedAt、详情 VO 带 contentMd），把最容易出安全事故的三条约定锁死
 - **待补**：管理端 Controller 合并后，补 `@WebMvcTest` + `@Import(SecurityConfig.class)` 的 401/403 断言，三条回归线为「公开不带 status」「管理端 401/403」「草稿隔离」
-- **状态**：🔒 依赖 P0-3（管理端接口）合并
+- **状态**：🔓 阻塞已解除（管理端 Controller 已进 `main`），可在下一轮补 `@WebMvcTest` 的 401/403 用例；当前已由 `AdminArticleServiceImplTest` 覆盖业务分支
 
 ## P2（体验 / 维护）
 
@@ -153,7 +155,7 @@
 | --- | --- | --- |
 | 前端 P0 | `openEdit` 用列表行回填导致正文被清空 | ✅ 已修（前端 e9a3446）：新增 `GET /admin/articles/{id}` 详情接口 + 先拉详情再回填 |
 | P1-5 | 多级分类跨层成环未校验 | 📅 已记录，开放多级编辑前必须补 |
-| P1-6 | 管理端 401/403 缺 MockMvc 链路测试 | 🔒 阻塞于管理端 Controller 未进仓库，先以反射契约测试替代 |
+| P1-6 | 管理端 401/403 缺 MockMvc 链路测试 | 🔓 管理端 Controller 已进 main，可补 @WebMvcTest；业务分支已由 AdminArticleServiceImplTest 覆盖 |
 | P3-3 | 标签表结构未定 | 📐 已定稿 `docs/PHASE3_TAG_DESIGN.md` |
 
-**未处理（需授权 / 待决策）**：P0-4 PAT 吊销、P0-3 管理端接口（已出施工单，后端本地开发中）、P2-1 删 `application.txt`、P3-1 `sql/` 目录去向、P0-2 删除动作。
+**未处理（需授权 / 待决策）**：P0-4 PAT 吊销、P2-1 删 `application.txt`、P3-1 `sql/` 目录去向、P0-2 删除动作。

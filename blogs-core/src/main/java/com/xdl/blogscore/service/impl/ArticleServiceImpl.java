@@ -15,6 +15,7 @@ import com.xdl.model.dto.ArticleQueryRequest;
 import com.xdl.model.dto.ArticleSaveRequest;
 import com.xdl.model.entity.Article;
 import com.xdl.model.entity.Category;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.AdminArticleSummaryVO;
 import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.ArticleSummaryVO;
@@ -165,10 +166,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public ArticleDetailVO getAdminDetail(Long id) {
+    public AdminArticleDetailVO getAdminDetail(Long id) {
         Article article = requireArticle(id);
         // 详情不改阅读量：管理端预览不应污染访客侧统计
-        return ArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()), article.getViewCount());
+        // 用管理端专用 VO：公开 ArticleDetailVO 不含 status，
+        // 编辑表单拿不到真实状态会把「已发布」回填成「草稿」，保存即下架
+        return AdminArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()));
     }
 
     @Override
