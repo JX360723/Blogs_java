@@ -132,6 +132,32 @@ curl -s -X POST http://localhost:8080/api/v1/admin/articles \
 | `/actuator/health` 返回 503 DOWN | 未起 Redis，但 Redis 健康检查默认开启 | 已在 `application.yaml` 设 `management.health.redis.enabled: false`；若确实要用 Redis，改回 true 并保证 Redis 可连 |
 | 分类删除 500 | 删除前未校验引用 | 后端必须按契约先 count 引用文章再删，有引用抛业务异常 |
 | **编辑文章正文框空白、保存后原文丢失** | 管理端详情接口缺失或未返回 contentMd | 前端编辑已改为先调 `GET /admin/articles/{id}` 拉全文（e9a3446）；若仍空白，检查该接口是否返回了 contentMd |
+| `npm run build` 报 `Cannot find package '.../node_modules/vite/index.js'` | `node_modules` 残缺：目录在但缺 `package.json`（云盘同步中断留下的空壳） | 在**本地磁盘**（如 `/tmp/fe_build`）安装依赖后构建，见下方「云盘环境构建」 |
+| `npm install` 报 `ENOTEMPTY: directory not empty, rename .../node_modules/xxx` | 云盘 FUSE 不支持 npm 的原子 rename | 同上：不要在云盘目录里装依赖 |
+
+### 云盘环境构建（已知限制）
+
+本项目工作区在云盘（FUSE 挂载），`npm install` 的原子 rename 会稳定失败。已验证可行的做法：
+
+```bash
+# 1. 在本地磁盘建构建目录
+mkdir -p /tmp/fe_build && cd /tmp/fe_build
+
+# 2. 只复制依赖清单（不复制 node_modules）
+cp /path/to/frontend/package.json /path/to/frontend/package-lock.json .
+
+# 3. 本地磁盘安装（约 15 秒装完 83 个包）
+npm ci
+
+# 4. 复制源码过去构建
+cp -r /path/to/frontend/src /path/to/frontend/index.html /path/to/frontend/vite.config.js .
+
+# 5. 构建
+npx vite build
+```
+
+**普通本地开发机（非云盘）不受此限制**，直接 `npm install && npm run dev` 即可。
+仓库里的 `frontend/node_modules/` 是不可用的残骸，已被 `.gitignore` 和 `.dockerignore` 排除。
 
 ## 7. 联调完成标准
 
