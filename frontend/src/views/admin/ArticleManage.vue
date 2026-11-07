@@ -40,9 +40,27 @@
         <el-table-column label="更新时间" width="160">
           <template #default="{ row }">{{ formatDate(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-button
+              v-if="row.status !== 1"
+              link
+              type="success"
+              :loading="statusLoadingId === row.id"
+              @click="onChangeStatus(row, 1)"
+            >
+              发布
+            </el-button>
+            <el-button
+              v-else
+              link
+              type="warning"
+              :loading="statusLoadingId === row.id"
+              @click="onChangeStatus(row, 2)"
+            >
+              下架
+            </el-button>
             <el-button link type="danger" @click="onDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -75,6 +93,23 @@
           <el-select v-model="form.categoryId" placeholder="选择分类" style="width: 100%">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="标签">
+          <!-- 只允许从已有标签里选：后端 tagIds 只接受标签 ID，
+               不做「提交时自动创建标签」，要新建标签请去标签管理页 -->
+          <el-select
+            v-model="form.tagIds"
+            multiple
+            filterable
+            :multiple-limit="10"
+            :loading="tagsLoading"
+            :disabled="form.tagIds === undefined"
+            :placeholder="form.tagIds === undefined ? '标签未加载，本次保存不会改动标签' : '选择标签（最多 10 个）'"
+            style="width: 100%"
+          >
+            <el-option v-for="t in tags" :key="t.id" :label="t.name" :value="t.id" />
+          </el-select>
+          <span v-if="!tags.length && !tagsLoading" class="tip">还没有标签，去「标签管理」新建</span>
         </el-form-item>
         <el-form-item label="封面">
           <el-input v-model="form.coverImage" placeholder="封面图片 URL（可选）" clearable />
@@ -126,11 +161,15 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAdminArticles, getAdminArticle, createArticle, updateArticle, deleteArticle } from '../../api/articles'
 import { getAdminCategories } from '../../api/categories'
+import { getAdminTags } from '../../api/tags'
 import { renderMarkdown } from '../../utils/markdown'
 import { formatDateTime as formatDate } from '../../utils/datetime'
 
 const list = ref([])
 const categories = ref([])
+const tags = ref([])
+const tagsLoading = ref(false)
+const statusLoadingId = ref(null)
 const loading = ref(false)
 const saving = ref(false)
 const formLoading = ref(false)
@@ -142,7 +181,22 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
-const form = reactive({ id: null, title: '', summary: '', contentMd: '', categoryId: null, status: 0, coverImage: '', isTop: 0 })
+// tagIds 的三态语义（对应后端 ArticleSaveRequest#tagIds）：
+//   undefined = 本次不提交该字段，后端保留原绑定
+//   []        = 清空标签
+//   非空数组  = 全量覆盖
+// 用 undefined 而不是 [] 做「未加载」的初始值，否则详情拉取失败时保存一次就把标签全清了
+const form = reactive({
+  id: null,
+  title: '',
+  summary: '',
+  contentMd: '',
+  categoryId: null,
+  status: 0,
+  coverImage: '',
+  isTop: 0,
+  tagIds: []
+})
 
 const rules = {
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
@@ -184,7 +238,18 @@ function onFilterChange() {
 
 function openCreate() {
   isEdit.value = false
-  Object.assign(form, { id: null, title: '', summary: '', contentMd: '', categoryId: categories.value[0]?.id ?? null, status: 0, coverImage: '', isTop: 0 })
+  Object.assign(form, {
+    id: null,
+    title: '',
+    summary: '',
+    contentMd: '',
+    categoryId: categories.value[0]?.id ?? null,
+    status: 0,
+    coverImage: '',
+    isTop: 0,
+    // 新建文章还没有任何绑定，传 [] 是准确的语义
+    tagIds: []
+  })
   dialogVisible.value = true
 }
 
@@ -204,7 +269,10 @@ async function openEdit(row) {
       categoryId: detail.categoryId,
       status: detail.status ?? 0,
       coverImage: detail.coverImage || '',
-      isTop: detail.isTop || 0
+      isTop: detail.isTop || 0,
+      // 详情没带 tagIds（老后端 / 字段缺失）时留 undefined：
+      // 保存时这个键会被丢掉，后端按「不修改」处理，标签原样保留
+      tagIds: Array.isArray(detail.tagIds) ? [...detail.tagIds] : undefined
     })
   } catch (e) {
     dialogVisible.value = false
@@ -218,9 +286,12 @@ async function onSave() {
   await formRef.value.validate()
   saving.value = true
   try {
-    const { id, ...payload } = form
+    const payload = { ...form }
+    delete payload.id
+    // undefined 会被 JSON.stringify 丢掉，等价于「不传该字段」
+    if (payload.tagIds === undefined) delete payload.tagIds
     if (isEdit.value) {
-      await updateArticle(id, payload)
+      await updateArticle(form.id, payload)
       ElMessage.success('更新成功')
     } else {
       await createArticle(payload)
@@ -232,6 +303,43 @@ async function onSave() {
     /* 拦截器已提示 */
   } finally {
     saving.value = false
+  }
+}
+
+// 列表里的快捷发布 / 下架
+// 不能只提交 { status }：后端 ArticleSaveRequest.title 是 @NotBlank，会被校验拦成 400；
+// 且 updateArticle 内部有 request.getTitle().trim()，title 为 null 直接 NPE。
+// 所以这里先拉一次详情，改 status 后整份提交，同时把 tagIds 原样带上，
+// 避免「点一下发布，标签被清空」。
+async function onChangeStatus(row, status) {
+  const actionText = status === 1 ? '发布' : '下架'
+  try {
+    await ElMessageBox.confirm(`确定${actionText}文章「${row.title}」吗？`, actionText, {
+      type: 'warning'
+    })
+  } catch (e) {
+    return
+  }
+  statusLoadingId.value = row.id
+  try {
+    const detail = await getAdminArticle(row.id)
+    const payload = {
+      title: detail.title,
+      summary: detail.summary,
+      contentMd: detail.contentMd,
+      categoryId: detail.categoryId,
+      coverImage: detail.coverImage,
+      isTop: detail.isTop,
+      status
+    }
+    if (Array.isArray(detail.tagIds)) payload.tagIds = detail.tagIds
+    await updateArticle(row.id, payload)
+    ElMessage.success(`${actionText}成功`)
+    load()
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    statusLoadingId.value = null
   }
 }
 
@@ -255,6 +363,14 @@ onMounted(async () => {
     categories.value = (await getAdminCategories()) || []
   } catch (e) {
     /* 分类加载失败不阻塞 */
+  }
+  tagsLoading.value = true
+  try {
+    tags.value = (await getAdminTags()) || []
+  } catch (e) {
+    /* 标签加载失败不阻塞：编辑弹窗里选择器会禁用，保存时不动标签 */
+  } finally {
+    tagsLoading.value = false
   }
   load()
 })

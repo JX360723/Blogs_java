@@ -18,6 +18,18 @@
           {{ article.categoryName || '未分类' }} · {{ formatDate(article.createdAt) }} · 阅读
           {{ article.viewCount }}
         </div>
+        <!-- 标签由后端 ArticleDetailVO.tags 返回（List<TagVO>），无标签时整块不渲染 -->
+        <div v-if="article.tags && article.tags.length" class="detail-tags">
+          <el-tag
+            v-for="t in article.tags"
+            :key="t.id"
+            size="small"
+            effect="plain"
+            class="detail-tag"
+          >
+            {{ t.name }}
+          </el-tag>
+        </div>
         <el-divider />
         <!-- Markdown 渲染（轻量自实现，见 utils/markdown.js；与编辑端预览一致） -->
         <div class="markdown-body" v-html="renderedMd"></div>
@@ -97,6 +109,15 @@ onMounted(async () => {
   margin-top: 10px;
   color: #909399;
   font-size: 13px;
+}
+.detail-tags {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-tag {
+  cursor: default;
 }
 /* Markdown 排版（与编辑端预览一致） */
 .markdown-body {
