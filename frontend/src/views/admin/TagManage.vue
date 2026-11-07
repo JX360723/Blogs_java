@@ -1,8 +1,17 @@
 <template>
   <div class="tag-manage">
+    <el-alert
+      v-if="!tagsReady"
+      class="stage-alert"
+      type="info"
+      show-icon
+      :closable="false"
+      title="标签能力属阶段 3，后端接口尚未交付"
+      description="当前连的是真实后端，/api/v1/admin/tags 还未实现，因此本页暂不发起请求（避免 404 误报）。标签表与接口落地后，把本文件里的 tagsReady 置为 true 即可启用。"
+    />
     <el-card shadow="never">
       <div class="toolbar">
-        <el-button type="primary" :icon="Plus" @click="openCreate">新建标签</el-button>
+        <el-button type="primary" :icon="Plus" :disabled="!tagsReady" @click="openCreate">新建标签</el-button>
       </div>
 
       <el-table v-loading="loading" :data="list" stripe>
@@ -47,7 +56,14 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getAdminTags, createTag, updateTag, deleteTag } from '../../api/tags'
+import { USE_MOCK } from '../../mock'
 import { formatDateTime as formatDate } from '../../utils/datetime'
+
+// 后端标签模块属阶段 3：tag / article_tag 表与 /api/v1/admin/tags 尚未交付。
+// 连真实后端时若照常发请求，会被 404 拦截并弹出「资源不存在」，看起来像接口坏了。
+// 所以这里显式降级：mock 模式（演示）正常跑，真实后端模式不请求、页面给出说明。
+// 标签接口上线后把它改成 true（或改为按后端能力探测）即可，其余代码无需改动。
+const tagsReady = USE_MOCK
 
 const list = ref([])
 const loading = ref(false)
@@ -62,6 +78,11 @@ const rules = {
 }
 
 async function load() {
+  // 阶段 3 未交付：不发请求，避免 404 噪音
+  if (!tagsReady) {
+    list.value = []
+    return
+  }
   loading.value = true
   try {
     list.value = (await getAdminTags()) || []
@@ -119,6 +140,9 @@ onMounted(load)
 </script>
 
 <style scoped>
+.stage-alert {
+  margin-bottom: 16px;
+}
 .toolbar {
   display: flex;
   justify-content: flex-end;

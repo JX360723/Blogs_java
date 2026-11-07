@@ -100,4 +100,18 @@
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
+
+	<!--
+		测试依赖统一在父 POM 声明：blogs-common / blogs-model / blogs-core 都带有
+		*ApplicationTests 等测试类，若只在 blogs-admin 里引 starter-test，
+		在根目录执行 `mvn test` 会因这几个模块 test-compile 找不到 org.junit.jupiter 而失败。
+		统一声明 scope=test，对无测试代码的模块（blogs-security）无副作用。
+	-->
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
 </project>

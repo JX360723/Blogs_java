@@ -29,6 +29,16 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    # 当前代码没有使用 Redis（blogs-common 里保留了 starter 与 dev 连接配置，属预留），
+    # 但 Spring Boot 会自动注册 RedisHealthIndicator：本机/测试环境没起 Redis 时
+    # /actuator/health 直接返回 503 DOWN，K8s 探活与监控会误判服务不可用。
+    # 真正引入缓存后再把这里改回 true，并给 Redis 配好探活超时。
+    redis:
+      enabled: false
+    # 数据源是核心依赖，必须参与健康检查：库连不上时探活要能立刻失败
+    db:
+      enabled: true
 
 # 认证与安全配置
 blogs:

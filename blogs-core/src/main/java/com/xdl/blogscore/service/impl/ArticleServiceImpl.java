@@ -7,23 +7,32 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.xdl.blogscommon.exception.BusinessException;
 import com.xdl.blogscommon.result.ResultCode;
 import com.xdl.blogscore.mapper.ArticleMapper;
+import com.xdl.blogscore.mapper.ArticleTagMapper;
 import com.xdl.blogscore.mapper.CategoryMapper;
+import com.xdl.blogscore.mapper.TagMapper;
 import com.xdl.blogscore.service.ArticleService;
 import com.xdl.blogscore.support.MarkdownRenderer;
 import com.xdl.model.dto.AdminArticleQueryRequest;
 import com.xdl.model.dto.ArticleQueryRequest;
 import com.xdl.model.dto.ArticleSaveRequest;
 import com.xdl.model.entity.Article;
+import com.xdl.model.entity.ArticleTag;
 import com.xdl.model.entity.Category;
+import com.xdl.model.entity.Tag;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.AdminArticleSummaryVO;
 import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.ArticleSummaryVO;
 import com.xdl.model.vo.PageResult;
+import com.xdl.model.vo.TagVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,9 +65,27 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
      */
     private static final String VIEW_COUNT_COLUMN = "view_count";
 
+    /**
+     * 单篇文章最多绑定的标签数
+     * <p>
+     * 不设上限的话，一次请求可以塞进几千个 tagId，同步时要生成同样多的 INSERT，
+     * 既能被用来打满数据库，也让详情接口的 tags 数组变成不可控大小。
+     */
+    private static final int MAX_TAGS_PER_ARTICLE = 10;
+
     private final CategoryMapper categoryMapper;
 
     private final MarkdownRenderer markdownRenderer;
+
+    /**
+     * 文章与标签的关联表：文章侧保存时要按 article_id 全量重建绑定
+     */
+    private final ArticleTagMapper articleTagMapper;
+
+    /**
+     * 标签表：用于校验 tagId 是否真实存在、以及回填标签详情
+     */
+    private final TagMapper tagMapper;
 
     @Override
     public PageResult<ArticleSummaryVO> pagePublished(ArticleQueryRequest query) {
@@ -67,6 +94,17 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 ? DEFAULT_PAGE_SIZE : query.getPageSize();
         Long categoryId = query.getCategoryId() == null || query.getCategoryId() <= 0
                 ? null : query.getCategoryId();
+        Long tagId = query.getTagId() == null || query.getTagId() <= 0 ? null : query.getTagId();
+        // 标签筛选：先取该标签下的文章ID，再把 ids 交给主查询做 IN 过滤。
+        // 这样能把「标签下没有文章」与「标签下文章都没发布」两种情况分得很清楚，
+        // 排查时只看一条 SQL 日志也能定位问题出在关联表还是 article 表。
+        List<Long> taggedArticleIds = tagId == null ? null : loadArticleIdsByTagId(tagId);
+        if (taggedArticleIds != null && taggedArticleIds.isEmpty()) {
+            // 关键：绝不能把空集合直接交给 .in(Article::getId, emptyList)，
+            // MyBatis-Plus 会拼出 `IN ()`，MySQL 语法报错，接口直接 500。
+            // 「标签下没有文章」本来就是合法的空结果，这里直接返回空页。
+            return PageResult.of(Collections.emptyList(), 0, pageNum, pageSize);
+        }
         String keyword = normalizeKeyword(query.getKeyword());
         // 关键词里的 % 与 _ 是 LIKE 通配符，不转义的话用户搜「%」会命中全部已发布文章；
         // 这里先转义再交给 MyBatis-Plus 拼 %value%
@@ -78,6 +116,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 // 公开接口只暴露已发布文章，草稿与下架由管理端接口负责
                 .eq(Article::getStatus, Article.STATUS_PUBLISHED)
                 .eq(categoryId != null, Article::getCategoryId, categoryId)
+                // tagId 只是筛选条件，status=1 的强制条件不受影响：
+                // 即便 tagId 命中的全是草稿，也只会得到空列表，不会把草稿带出来
+                .in(taggedArticleIds != null, Article::getId, taggedArticleIds)
                 // 关键词对标题或摘要做模糊匹配，两个条件必须整体加括号，
                 // 否则 OR 会与 status 条件平级，导致草稿文章被搜出来
                 .and(likeKeyword != null, sub -> sub
@@ -118,7 +159,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .update();
 
         int currentViewCount = (article.getViewCount() == null ? 0 : article.getViewCount()) + 1;
-        return ArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()), currentViewCount);
+        return ArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()),
+                currentViewCount, loadTags(id));
     }
 
     // ==================== 管理端（需 JWT + ROLE_ADMIN，鉴权由 SecurityConfig 强制） ====================
@@ -165,13 +207,17 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    public ArticleDetailVO getAdminDetail(Long id) {
+    public AdminArticleDetailVO getAdminDetail(Long id) {
         Article article = requireArticle(id);
-        // 详情不改阅读量：管理端预览不应污染访客侧统计
-        return ArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()), article.getViewCount());
+        // 详情不改阅读量：管理端预览不应污染访客侧统计。
+        // tagIds 必须给空数组而不是 null：前端 el-select 的 v-model 绑到 null 上会直接抛
+        // Cannot read properties of null，编辑弹窗白屏。
+        return AdminArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()),
+                loadTagIds(id), loadTags(id));
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createArticle(ArticleSaveRequest request, Long adminId) {
         Long categoryId = normalizeCategoryId(request.getCategoryId());
         validateCategoryExists(categoryId);
@@ -194,10 +240,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .build();
         // createdAt / updatedAt 由 MybatisMetaObjectHandler 自动填充，这里不手动 set
         save(article);
+        // 文章与标签分两张表，写标签失败必须让文章一起回滚，否则会出现「文章存了、标签丢了」的半成品
+        syncArticleTags(article.getId(), request.getTagIds());
         return article.getId();
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updateArticle(Long id, ArticleSaveRequest request) {
         requireArticle(id);
         // 施工单明确「分类不存在时不要报错」：分类可能在编辑期间被删除，
@@ -232,6 +281,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         update(update, Wrappers.lambdaUpdate(Article.class)
                 .eq(Article::getId, id)
                 .set(Article::getCategoryId, normalizeCategoryId(request.getCategoryId())));
+
+        // 标签同理由本方法收敛：tagIds 为 null 时不改动绑定，为 [] 时清空，为非空时全量覆盖
+        syncArticleTags(id, request.getTagIds());
     }
 
     @Override
@@ -343,6 +395,131 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return keyword.replace("\\", "\\\\")
                 .replace("%", "\\%")
                 .replace("_", "\\_");
+    }
+
+    /**
+     * 查询某个标签下的全部文章ID
+     * <p>
+     * 只取 article_id 一列：调用方只需要 ID 做 IN 过滤，把整行取回来纯属浪费带宽。
+     *
+     * @param tagId 标签ID
+     * @return 文章ID列表，标签下没有文章时返回空集合（调用方必须先判空再拼 IN）
+     */
+    private List<Long> loadArticleIdsByTagId(Long tagId) {
+        List<ArticleTag> links = articleTagMapper.selectList(
+                Wrappers.lambdaQuery(ArticleTag.class)
+                        .select(ArticleTag::getArticleId)
+                        .eq(ArticleTag::getTagId, tagId));
+        return links.stream()
+                .map(ArticleTag::getArticleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 查询文章已绑定的标签ID
+     * <p>
+     * 恒返回集合（无标签时空集合，绝不返回 null）：管理端详情直接把结果塞进 response，
+     * 前端 el-select 的 v-model 一旦拿到 null 就会抛异常。
+     *
+     * @param articleId 文章ID
+     * @return 标签ID列表，按绑定先后排序
+     */
+    private List<Long> loadTagIds(Long articleId) {
+        List<ArticleTag> links = articleTagMapper.selectList(
+                Wrappers.lambdaQuery(ArticleTag.class)
+                        .select(ArticleTag::getTagId)
+                        .eq(ArticleTag::getArticleId, articleId)
+                        .orderByAsc(ArticleTag::getId));
+        return links.stream()
+                .map(ArticleTag::getTagId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * 查询文章已绑定的标签详情
+     * <p>
+     * 先按 articleId 取 tagId，再一次性把标签查回来，避免逐个 tagId 查库造成 N+1。
+     * 输出顺序跟随绑定顺序，而不是标签表的主键顺序，保证同一篇文章的标签展示稳定。
+     *
+     * @param articleId 文章ID
+     * @return 标签视图列表，无标签时为空集合
+     */
+    private List<TagVO> loadTags(Long articleId) {
+        List<Long> tagIds = loadTagIds(articleId);
+        if (tagIds.isEmpty()) {
+            return List.of();
+        }
+        List<Tag> tags = tagMapper.selectList(
+                Wrappers.lambdaQuery(Tag.class).in(Tag::getId, tagIds));
+        Map<Long, Tag> tagMap = tags.stream()
+                .collect(Collectors.toMap(Tag::getId, tag -> tag, (first, second) -> first));
+        List<TagVO> result = new ArrayList<>(tagIds.size());
+        for (Long tagId : tagIds) {
+            Tag tag = tagMap.get(tagId);
+            // 关联表里可能存在指向已删除标签的历史脏行（例如早期手工改库），跳过而不是塞 null
+            if (tag != null) {
+                result.add(TagVO.from(tag));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 同步文章与标签的绑定关系（三态语义）
+     * <p>
+     * 三种入参语义必须严格区分，否则会出现「只想改标题、标签却被清空」这类静默丢数据：
+     * <ul>
+     *   <li>{@code null}：<b>不修改</b>，保留原绑定。前端编辑页没有动标签选择器时不会提交该字段</li>
+     *   <li>{@code []}：<b>清空</b>全部绑定，代表用户主动把标签都删掉了</li>
+     *   <li>非空：全量覆盖（先删后插），并做去重、上限校验与无效 tagId 过滤</li>
+     * </ul>
+     * 过滤「库里已不存在的 tagId」而不是整体报错：标签可能刚被别的管理员删掉，
+     * 此时让用户整篇正文白填一遍，体验比静默跳过几个失效标签差得多。
+     *
+     * @param articleId 文章ID
+     * @param tagIds    前端提交的标签ID列表，语义见上
+     */
+    private void syncArticleTags(Long articleId, List<Long> tagIds) {
+        if (tagIds == null) {
+            // 不传 = 不动标签，直接返回；这里绝不能当成「清空」处理
+            return;
+        }
+
+        // 去重保序：重复的 tagId 会直接撞 uk_article_tag 唯一索引（Duplicate entry 500）
+        LinkedHashSet<Long> uniqueIds = tagIds.stream()
+                .filter(Objects::nonNull)
+                .filter(tagId -> tagId > 0)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        if (uniqueIds.size() > MAX_TAGS_PER_ARTICLE) {
+            throw new BusinessException(ResultCode.BAD_REQUEST,
+                    "单篇文章最多绑定 " + MAX_TAGS_PER_ARTICLE + " 个标签");
+        }
+
+        // 过滤无效 ID：只保留标签表里真实存在的
+        List<Long> existingIds = uniqueIds.isEmpty() ? List.of()
+                : tagMapper.selectList(Wrappers.lambdaQuery(Tag.class)
+                        .select(Tag::getId)
+                        .in(Tag::getId, uniqueIds))
+                .stream()
+                .map(Tag::getId)
+                .toList();
+        List<Long> validTagIds = uniqueIds.stream().filter(existingIds::contains).toList();
+
+        // 先全删再插入：单篇文章的标签通常只有几个，全量重建比逐条 diff 更简单，
+        // 也不会漏掉「用户取消勾选」这种解绑操作
+        articleTagMapper.delete(Wrappers.lambdaQuery(ArticleTag.class)
+                .eq(ArticleTag::getArticleId, articleId));
+        for (Long tagId : validTagIds) {
+            articleTagMapper.insert(ArticleTag.builder()
+                    .articleId(articleId)
+                    .tagId(tagId)
+                    .build());
+        }
     }
 
     /**

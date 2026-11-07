@@ -1,8 +1,8 @@
 # 本地联调 Checklist（真实后端）
 
 > 适用：开发者在**自己电脑**上跑通「前端 → 真实后端」全链路。
-> 基线：后端 main 已含登录/me + 公开侧 3 个接口（文章列表、文章详情、分类列表）。
-> **管理端 9 个接口尚未实现**（契约见 `docs/WORKBUDDY_PROMPT_PHASE3_ADMIN_API.md`），第 5 节管理端验证需等后端交付后再执行。
+> 基线（2026-11-07）：后端 main 已含登录/me + 公开侧 3 个接口 + **管理端 9 个接口**
+> （文章 5 + 分类 4），接口全部 ✅ 已实现。标签仍属阶段 3（`/api/v1/tags` 未交付），前端已降级。
 > 注意：Agent 云端环境访问不到你本机 `localhost:8080`，本清单由你本机执行。
 
 ## 0. 准备
@@ -22,14 +22,18 @@ npm install
 ```bash
 cd Blogs_java
 export JWT_SECRET="至少32字节的随机字符串，例如 0123456789abcdef0123456789abcdef"
+export DB_USERNAME=root
+export DB_PASSWORD='你的本机密码'
 # 首次建库/建管理员还需 ADMIN_INIT_PASSWORD（之后可省略，AdminUserInitializer 仅首次创建）
 export ADMIN_INIT_PASSWORD="你的初始管理员密码"
-java -jar blogs-admin/target/blogs-admin-*.jar --spring.profiles.active=dev
+java -jar blogs-admin/target/blogs-admin-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev --server.port=8080
 ```
 
-- 数据库：MySQL 8.0，库名 `blogs_db`（dev profile，见 `application-dev.yml`，默认 root/123456@localhost:3306，按本机实际改）
+- 数据库：MySQL 8.0，库名 `blogs_db`（dev profile，见 `application-dev.yml`，账号口令取自 `DB_USERNAME`/`DB_PASSWORD` 环境变量）
 - dev 启动自动执行 `db/schema.sql` 建表（admin_user / article / category）
 - 启动成功标志：控制台出现 Tomcat started on port **8080**，且日志显示管理员初始化成功
+- 排障：若 Tomcat 起在随机高端口（如 51493）并报 `port already in use`，说明宿主环境注入了 `SERVER_PORT`，用 `--server.port=8080` 覆盖即可（命令行参数优先级最高）
+- 健康检查：`curl http://localhost:8080/actuator/health` 应返回 `{"status":"UP"}`（Redis 健康检查已显式关闭，未起 Redis 也不影响）
 
 ## 2. 起前端（关闭 mock，连真实后端）
 
@@ -78,7 +82,7 @@ curl -s "http://localhost:8080/api/v1/articles?pageNum=1&pageSize=10&keyword=Vue
 curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6   # 期望 404
 ```
 
-## 5. 管理端 9 个接口（⚠️ 待后端交付后执行）
+## 5. 管理端 9 个接口（后端已实现，可直接验证）
 
 全部需要 `Authorization: Bearer $TOKEN`；不带 token → 401，非管理员 → 403。
 
@@ -90,7 +94,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/v1/articles/6
 | ② | `POST /api/v1/admin/articles` | body `{title, summary, contentMd, categoryId, status, coverImage, isTop}`；返回 data 为 id（Long） |
 | ③ | `PUT /api/v1/admin/articles/{id}` | body 同上；200；改 status=1 后公开列表能搜到 |
 | ④ | `DELETE /api/v1/admin/articles/{id}` | 200（逻辑删除）；删除后管理列表消失、公开详情 404 |
-| ⑤ | `GET /api/v1/admin/articles/{id}` | 200；**`data.contentMd` 必须是完整正文**（路径与字段名已于 2026-11-04 与后端确认）。这条不通过会导致「编辑文章保存后正文被清空」——列表接口不含正文，编辑必须靠它回填 |
+| ⑤ | `GET /api/v1/admin/articles/{id}` | 200；**`data.contentMd` 必须是完整正文**，且**必须含 `data.status`（0/1/2）**（2026-11-07 后端已补该字段）。缺 `contentMd` → 保存后正文被清空；缺 `status` → 编辑已发布文章会被静默降级成草稿 |
 
 ### 5.2 分类 CRUD
 
@@ -120,13 +124,19 @@ curl -s -X POST http://localhost:8080/api/v1/admin/articles \
 | 404 | 路径写错 / 文章未发布 / 分类不存在 | 核对 URL（前缀 /api/v1）；草稿与下架对公开接口就是 404，属正常 |
 | 管理端列表 status 列全「未知」 | 后端 VO 未返回 status | 确认后端用 `AdminArticleSummaryVO`（含 status + updatedAt），公开 VO 不要加 |
 | 时间显示 NaN-NaN | 后端时间格式不是 `yyyy-MM-dd HH:mm:ss` | 后端已配 JacksonConfig 统一格式；如仍异常检查是否有 @JsonFormat 覆盖 |
+| 首页/标签页弹「资源不存在」 | 后端标签接口属阶段 3 未交付，前端却发了 `/api/v1/tags`、`/api/v1/admin/tags` | 已降级：`ArticleList.vue` 的 `tagFilterEnabled=false` 时不再请求；`TagManage.vue` 的 `tagsReady=false` 时不请求并显示说明。标签接口上线后把这两个开关置 true |
+| `/actuator/health` 返回 503 DOWN | 未起 Redis，但 Redis 健康检查默认开启 | 已在 `application.yaml` 设 `management.health.redis.enabled: false`；若确实要用 Redis，改回 true 并保证 Redis 可连 |
 | 分类删除 500 | 删除前未校验引用 | 后端必须按契约先 count 引用文章再删，有引用抛业务异常 |
 | **编辑文章正文框空白、保存后原文丢失** | 管理端详情接口缺失或未返回 contentMd | 前端编辑已改为先调 `GET /admin/articles/{id}` 拉全文（e9a3446）；若仍空白，检查该接口是否返回了 contentMd |
 
 ## 7. 联调完成标准
 
-- [ ] 登录成功拿 token，刷新页面登录态保持（/auth/me 生效）
-- [ ] 公开列表：分页 / 关键词 / 分类筛选正常，草稿 404，详情阅读数 +1
-- [ ] 管理端文章 5 接口全通（含 status 筛选、详情回填正文、新建后公开可见、逻辑删除生效）
-- [ ] 管理端分类 4 接口全通（含删除引用校验）
+> 2026-11-07 已按本清单在真实 MySQL 8.0.42 + JDK 17 上跑过 HTTP 层全链路（33 条断言全 PASS，
+> 详见 `docs/INTEGRATION_WRAPUP_2026-11-07.md` 第 5 节）。打勾项为已验证；UI 交互仍需人工点一遍。
+
+- [x] 登录成功拿 token，刷新页面登录态保持（/auth/me 生效）—— HTTP 层已验证
+- [x] 公开列表：分页 / 关键词 / 分类筛选正常，草稿 404，详情阅读数 +1
+- [x] 管理端文章 5 接口全通（含 status 筛选、详情回填正文与 status、新建后公开可见、逻辑删除生效）
+- [x] 管理端分类 4 接口全通（含删除引用校验）
+- [ ] 浏览器端交互：登录页跳转、文章弹窗回填与保存、表格分页、删除确认框
 - [ ] 前端切 mock（删掉 .env.local 或 VITE_USE_MOCK=true）后回退正常

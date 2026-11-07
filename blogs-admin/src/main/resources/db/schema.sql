@@ -61,3 +61,29 @@ CREATE TABLE IF NOT EXISTS `category`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_general_ci COMMENT ='知识版块分类表';
+
+-- 标签表：物理删除，刻意不加 deleted 字段
+-- 全局 logic-delete-field: deleted 一旦命中，removeById 会变成 UPDATE ... SET deleted=1，
+-- 而 uk_tag_name 是唯一索引，删掉后重建同名标签会撞唯一键报 500，故标签走物理删除。
+CREATE TABLE IF NOT EXISTS `tag`
+(
+    `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '标签ID',
+    `name`        VARCHAR(30) NOT NULL COMMENT '标签名称',
+    `description` VARCHAR(255) DEFAULT NULL COMMENT '标签描述',
+    `created_at`  DATETIME    DEFAULT NULL COMMENT '创建时间',
+    `updated_at`  DATETIME    DEFAULT NULL COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tag_name` (`name`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT ='标签表';
+
+-- 文章标签关联表：同样物理删除，删除标签时由 TagServiceImpl 先清理关联行，不留孤儿数据
+CREATE TABLE IF NOT EXISTS `article_tag`
+(
+    `id`         BIGINT   NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `article_id` BIGINT   NOT NULL COMMENT '文章ID',
+    `tag_id`     BIGINT   NOT NULL COMMENT '标签ID',
+    `created_at` DATETIME DEFAULT NULL COMMENT '绑定时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_article_tag` (`article_id`, `tag_id`),
+    KEY `idx_article_tag_tag` (`tag_id`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT ='文章标签关联表';

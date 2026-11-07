@@ -279,7 +279,7 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 
 | 方法 | 路径 | 说明 | 关键参数 |
 | --- | --- | --- | --- |
-| ✅ GET | `/api/v1/articles` | 分页，**仅 `status=1`**，按 `isTop` 降序 + `created_at` 降序 | `pageNum`、`pageSize`、`categoryId`、`keyword`（标题/摘要模糊） |
+| ✅ GET | `/api/v1/articles` | 分页，**仅 `status=1`**，按 `isTop` 降序 + `created_at` 降序 | `pageNum`、`pageSize`、`categoryId`、`keyword`（标题/摘要模糊）、`tagId`（标签筛选，2026-11-07 新增） |
 | ✅ GET | `/api/v1/articles/{id}` | 已发布文章详情，**`viewCount` +1**；草稿/下架返回 404 | 路径参数 `id` |
 | ✅ GET | `/api/v1/categories` | 分类列表（扁平数组，非分页），按 `sort_order` 升序 | 无 |
 
@@ -310,19 +310,22 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
   "contentHtml": "<h1>标题</h1>...",
   "categoryId": 2, "coverImage": "https://...",
   "viewCount": 129, "isTop": 0,
+  "tags": [{"id": 1, "name": "Java", "description": null, "createdAt": "2026-10-01 10:00:00"}],
   "createdAt": "2026-10-01 10:00:00"
 }
 ```
 
 > ⚠️ **不返回 `publishedAt`**：`Article` 实体无此字段，用 `createdAt` 代替。
-> ⚠️ **不返回 `tagIds`**：标签属阶段 3。
+> ⚠️ **不返回 `status`**：公开详情只返回已发布文章，暴露状态无信息量且会诱导 `?status=0` 拉草稿。
+> 管理端编辑回填需要 status，走独立的 `GET /api/v1/admin/articles/{id}` → `AdminArticleDetailVO`
+> （含 `status`、`tagIds`、`tags`；`tagIds` 恒为数组不为 null）。
 
 #### 管理端接口（9 个，需 JWT + ROLE_ADMIN）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | ✅ GET | `/api/v1/admin/articles` | 分页，**含草稿/下架**，支持 `status` 筛选；列表**不返回正文**（排除 `content_md`/`content_html`/`ai_summary`） |
-| ✅ GET | `/api/v1/admin/articles/{id}` | 单篇详情（含草稿/下架），返回 `contentMd`+`contentHtml`，编辑回填用 |
+| ✅ GET | `/api/v1/admin/articles/{id}` | 单篇详情（含草稿/下架），返回 `AdminArticleDetailVO`：`contentMd`+`contentHtml`+`status`+`tagIds`+`tags`，编辑回填用（`tagIds` 恒为数组） |
 | ✅ POST | `/api/v1/admin/articles` | 创建（可草稿/发布），返回新文章 ID |
 | ✅ PUT | `/api/v1/admin/articles/{id}` | 更新，返回空响应体 |
 | ✅ DELETE | `/api/v1/admin/articles/{id}` | 逻辑删除，返回空响应体 |
@@ -345,7 +348,8 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
   "contentMd": "# 标题\n正文...",
   "categoryId": 2,
   "coverImage": "https://...",
-  "status": 1
+  "status": 1,
+  "tagIds": [1, 2]
 }
 ```
 
@@ -355,6 +359,7 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 - `viewCount` 默认 0、`isTop` 默认 0，服务端兜底
 - `status` 只允许 0/1/2，非法值返回 `400`
 - 更新已发布文章时**不重置**创建时间
+- `tagIds` 三态：不传/null = 不改动标签；`[]` = 清空；非空 = 全量覆盖（去重、过滤不存在的 ID、>10 个返回 400）
 
 **分类创建/更新请求体**：
 
@@ -362,15 +367,18 @@ Vite Dev Server (5173)  ── proxy /api ──▶  后端 (localhost:8080)
 { "name": "Java 后端", "parentId": 0, "description": "描述", "sortOrder": 10 }
 ```
 
-#### 阶段 3 接口（5 个，预留不实现）
+#### 标签接口（5 个，2026-11-07 已实现，属阶段 4）
 
-| 方法 | 路径 |
-| --- | --- |
-| 🔒 GET | `/api/v1/tags` |
-| 🔒 GET | `/api/v1/admin/tags` |
-| 🔒 POST | `/api/v1/admin/tags` |
-| 🔒 PUT | `/api/v1/admin/tags/{id}` |
-| 🔒 DELETE | `/api/v1/admin/tags/{id}` |
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| ✅ GET | `/api/v1/tags` | 公开标签列表（扁平数组，`created_at DESC, id DESC`） |
+| ✅ GET | `/api/v1/admin/tags` | 管理端标签列表 |
+| ✅ POST | `/api/v1/admin/tags` | 创建，重名 400「标签名称已存在」 |
+| ✅ PUT | `/api/v1/admin/tags/{id}` | 更新，判重排除自身 |
+| ✅ DELETE | `/api/v1/admin/tags/{id}` | **物理删除**，先清 `article_tag` 再删标签（同一事务） |
+
+> 标签表刻意不带 `deleted`：全局 `logic-delete-field: deleted` 会把 `removeById` 变成软删，
+> 而 `uk_tag_name` 唯一索引会挡住「删掉再建同名标签」。实现与验收见 `docs/PHASE4_TAG_IMPLEMENTATION.md`。
 
 #### MVP 不支持
 
