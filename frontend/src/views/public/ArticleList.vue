@@ -33,9 +33,8 @@
           </el-radio-button>
         </el-radio-group>
 
-        <!-- 标签筛选：后端 ArticleQueryRequest 暂无 tagId（契约 6.1.1 标注阶段3），
-             开启筛选会静默无效，故默认隐藏并提示；tagFilterEnabled 置 true 即可恢复 -->
-        <div class="tag-bar" v-if="tagFilterEnabled">
+        <!-- 标签筛选：后端 ArticleQueryRequest.tagId 已上线，选中后按 article_tag 关联表过滤 -->
+        <div class="tag-bar" v-if="tags.length">
           <span class="tag-label">标签：</span>
           <el-check-tag
             v-for="t in tags"
@@ -45,12 +44,6 @@
           >
             {{ t.name }}
           </el-check-tag>
-        </div>
-        <div class="tag-bar" v-else>
-          <span class="tag-label">标签：</span>
-          <el-tooltip content="标签功能阶段3开放" placement="top">
-            <el-tag type="info" effect="plain" size="small" class="tag-soon">阶段3开放</el-tag>
-          </el-tooltip>
         </div>
       </div>
 
@@ -110,9 +103,6 @@ const pageSize = 10
 const total = ref(0)
 const loading = ref(false)
 
-// 标签筛选开关：后端 tagId 为阶段3能力，当前置 false 隐藏筛选条（保留完整代码路径，阶段3开启后置 true 即可）
-const tagFilterEnabled = false
-
 async function load() {
   loading.value = true
   try {
@@ -131,11 +121,6 @@ async function load() {
 }
 
 function onSearch() {
-  pageNum.value = 1
-  load()
-}
-
-function onCategoryChange() {
   pageNum.value = 1
   load()
 }
@@ -173,14 +158,10 @@ onMounted(async () => {
   } catch (e) {
     /* 分类加载失败不阻塞列表 */
   }
-  // 标签属阶段 3 能力：后端 /api/v1/tags 尚未交付，开关关闭时不要请求，
-  // 否则访客每次打开首页都会收到 404 并弹出「资源不存在」。
-  if (tagFilterEnabled) {
-    try {
-      tags.value = (await getTags()) || []
-    } catch (e) {
-      /* 标签加载失败不阻塞列表 */
-    }
+  try {
+    tags.value = (await getTags()) || []
+  } catch (e) {
+    /* 标签加载失败不阻塞列表：筛选条会因 tags 为空而整体隐藏 */
   }
   load()
 })
