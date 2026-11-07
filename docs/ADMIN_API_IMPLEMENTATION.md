@@ -20,7 +20,15 @@
 | 6 | POST   | `/api/v1/admin/categories`      | `Long`（新 ID）                        | 同级重名校验，`parentId` 兜底 0      |
 | 7 | PUT    | `/api/v1/admin/categories/{id}` | `Void`                              | 判重时排除自身                     |
 | 8 | DELETE | `/api/v1/admin/categories/{id}` | `Void`                              | **有文章引用则拒绝**并提示篇数           |
-| 附 | GET    | `/api/v1/admin/articles/{id}`   | `ArticleDetailVO`                   | 编辑回填正文用（施工单未列，见 2.2 说明）     |
+| 附 | GET    | `/api/v1/admin/articles/{id}`   | `AdminArticleDetailVO`              | 编辑回填正文与状态用（施工单未列，见 2.2 说明）  |
+
+> **修订 2026-11-07：详情接口返回类型由 `ArticleDetailVO` 改为 `AdminArticleDetailVO`。**
+> 公开侧 `ArticleDetailVO` 刻意不含 `status`（防止访客探测草稿），但它同时被管理端详情接口复用，
+> 导致前端编辑表单拿不到真实状态：`detail.status ?? 0` 恒等于 0，一篇已发布文章打开编辑框时
+> 状态单选显示为「草稿」，用户改个错别字点保存，`PUT` 提交 `status=0`，文章立刻从公开列表消失——
+> 页面上没有任何报错，属于静默的数据/可见性事故。
+> 现在管理端详情单独返回 `AdminArticleDetailVO`（含 `status`），公开 VO 保持不含 `status`，
+> 两条契约各守一边，`PublicApiContractTest` 与 `AdminArticleServiceImplTest` 分别锁死。
 
 路径与前端 `frontend/src/api/articles.js`、`categories.js` 逐一对应，未改名、未调整层级。  
 鉴权沿用 `SecurityConfig` 的 `/api/v1/admin/**` → `hasRole("ADMIN")`，Controller 内未写任何鉴权代码。

@@ -210,6 +210,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public AdminArticleDetailVO getAdminDetail(Long id) {
         Article article = requireArticle(id);
         // 详情不改阅读量：管理端预览不应污染访客侧统计。
+        // 用管理端专用 VO：公开 ArticleDetailVO 不含 status，
+        // 编辑表单拿不到真实状态会把「已发布」回填成「草稿」，保存即下架。
         // tagIds 必须给空数组而不是 null：前端 el-select 的 v-model 绑到 null 上会直接抛
         // Cannot read properties of null，编辑弹窗白屏。
         return AdminArticleDetailVO.from(article, loadCategoryName(article.getCategoryId()),

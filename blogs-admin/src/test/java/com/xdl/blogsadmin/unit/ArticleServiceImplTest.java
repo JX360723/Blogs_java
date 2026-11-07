@@ -1,7 +1,5 @@
 package com.xdl.blogsadmin.unit;
 
-import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.xdl.blogscommon.exception.BusinessException;
 import com.xdl.blogscore.mapper.ArticleMapper;
 import com.xdl.blogscore.mapper.ArticleTagMapper;
@@ -9,10 +7,7 @@ import com.xdl.blogscore.mapper.CategoryMapper;
 import com.xdl.blogscore.mapper.TagMapper;
 import com.xdl.blogscore.service.impl.ArticleServiceImpl;
 import com.xdl.model.entity.Article;
-import com.xdl.model.entity.ArticleTag;
-import com.xdl.model.entity.Tag;
 import com.xdl.model.vo.AdminArticleDetailVO;
-import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -36,7 +30,7 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("公开文章-草稿隔离")
-class ArticleServiceImplTest {
+class ArticleServiceImplTest extends ServiceTestSupport {
 
     private static final Long ARTICLE_ID = 100L;
 
@@ -59,21 +53,15 @@ class ArticleServiceImplTest {
     private ArticleServiceImpl articleService;
 
     /**
-     * ServiceImpl 的 getById / lambdaUpdate 等内置方法都走 CrudRepository.getBaseMapper()，
-     * 而该字段由 Spring 注入、Mockito 的 @InjectMocks 不会填它，直接调用会抛
-     * 「baseMapper can not be null」。这里手工把 mock 的 mapper 塞进去，
-     * 让被测代码调用真实的 ServiceImpl 方法（而不是把 getById 也 mock 掉）。
+    /**
+     * 把 Mock 的 Mapper 补进 ServiceImpl 的父类字段，否则 getById 等继承方法抛 baseMapper can not be null
+     * <p>
+     * 实体元数据（TableInfo）由 {@link ServiceTestSupport#initTableInfoCache()} 在 {@code @BeforeAll}
+     * 统一注册，本类涉及的 Article / Category / Tag / ArticleTag 都已覆盖。
      */
     @BeforeEach
-    void injectBaseMapper() {
-        // 纯单元测试没有经过 MyBatis 的启动扫描，实体元信息（TableInfo）不会被注册；
-        // 而 Wrappers.lambdaQuery(ArticleTag.class) 这类 lambda 条件构造器必须先有元信息，
-        // 否则抛 MybatisPlusException: can not find lambda cache for this entity。
-        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
-        TableInfoHelper.initTableInfo(assistant, ArticleTag.class);
-        TableInfoHelper.initTableInfo(assistant, Tag.class);
-
-        ReflectionTestUtils.setField(articleService, "baseMapper", articleMapper);
+    void setUpBaseMapper() {
+        injectBaseMapper(articleService, articleMapper);
     }
 
     private static Article article(Integer status) {

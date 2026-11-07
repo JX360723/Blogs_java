@@ -53,15 +53,20 @@ public interface ArticleService extends IService<Article> {
     PageResult<AdminArticleSummaryVO> pageForAdmin(AdminArticleQueryRequest query);
 
     /**
-     * 管理端文章详情：草稿与已下架同样可查看，供编辑回填正文与标签
+     * 管理端文章详情：草稿与已下架同样可查看，供编辑回填正文、状态与标签
+     * <p>
+     * 附带接口：施工单的 8 个接口未包含详情，但管理页「编辑」需要正文。
+     * 列表为控制响应体积不返回 contentMd，编辑前应调用本接口取回正文，
+     * 否则提交时会用空串覆盖原文。
      * <p>
      * 必须返回 {@link AdminArticleDetailVO}（含 {@code status}）而不能退回公开侧
      * {@code ArticleDetailVO}：编辑表单会把整个表单（含 status）原样 PUT 回去，
-     * 少一个 status 就会把已发布文章静默降级成草稿。
+     * 少一个 status 就会把已发布文章静默降级成草稿，用户改个错别字保存，
+     * 文章就从公开列表消失。
      * {@code tagIds} 恒为非 null 数组，避免前端 el-select 绑 null 报错。
      *
      * @param id 文章ID
-     * @return 管理端文章详情（含 contentMd / status / tagIds / tags）
+     * @return 管理端文章详情（含 contentMd / contentHtml / status / tagIds / tags）
      */
     AdminArticleDetailVO getAdminDetail(Long id);
 

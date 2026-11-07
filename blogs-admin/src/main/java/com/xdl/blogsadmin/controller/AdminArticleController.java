@@ -52,10 +52,14 @@ public class AdminArticleController {
     }
 
     /**
-     * 查询文章详情（含草稿与已下架），供编辑回填正文
+     * 查询文章详情（含草稿与已下架），供编辑回填正文与状态
      * <p>
      * 附加接口：列表为控制响应体积不返回 {@code contentMd}，
      * 前端打开编辑弹窗时应先调本接口取回正文，否则提交时会把正文覆盖成空串。
+     * <p>
+     * 返回 {@link AdminArticleDetailVO} 而不是公开侧的 {@code ArticleDetailVO}：
+     * 公开 VO 刻意不含 {@code status}，编辑表单拿不到真实状态会把「已发布」回填成「草稿」，
+     * 用户改个错别字保存，文章就从公开列表消失。
      *
      * @param id 文章ID
      * @return 管理端文章详情，含 contentMd、status、tagIds 与渲染后的 contentHtml
