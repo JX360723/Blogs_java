@@ -5,8 +5,8 @@ import com.xdl.blogscommon.result.Result;
 import com.xdl.blogscore.service.ArticleService;
 import com.xdl.model.dto.AdminArticleQueryRequest;
 import com.xdl.model.dto.ArticleSaveRequest;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.AdminArticleSummaryVO;
-import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.PageResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -58,10 +58,10 @@ public class AdminArticleController {
      * 前端打开编辑弹窗时应先调本接口取回正文，否则提交时会把正文覆盖成空串。
      *
      * @param id 文章ID
-     * @return 文章详情，含 contentMd 与渲染后的 contentHtml
+     * @return 管理端文章详情，含 contentMd、status、tagIds 与渲染后的 contentHtml
      */
     @GetMapping("/{id}")
-    public Result<ArticleDetailVO> detail(@PathVariable Long id) {
+    public Result<AdminArticleDetailVO> detail(@PathVariable Long id) {
         return Result.success(articleService.getAdminDetail(id));
     }
 

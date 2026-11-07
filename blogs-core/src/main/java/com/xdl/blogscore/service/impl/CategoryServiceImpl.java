@@ -33,6 +33,14 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     private static final long ROOT_PARENT_ID = 0L;
 
     /**
+     * 父级回溯的最大深度
+     * <p>
+     * 用来兜底历史脏数据里已经存在的环：没有这个上限，
+     * 沿 parent_id 向上遍历遇到 A→B→A 会永远转下去，接口直接挂死。
+     */
+    private static final int MAX_PARENT_DEPTH = 10;
+
+    /**
      * 删除分类时要把引用该分类的文章解绑，需要跨表操作
      */
     private final ArticleMapper articleMapper;
@@ -113,10 +121,18 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
 
     /**
-     * 校验父分类
+     * 校验父分类（含跨层成环检测）
+     * <p>
+     * 只拦「父分类是自己」是不够的：A 的父级设为 B、B 的父级又是 A，就形成了环。
+     * 一旦成环，任何按 parent_id 向上遍历的逻辑（面包屑、树形组装、这里的校验本身）
+     * 都会死循环，接口挂住不返回。
+     * <p>
+     * 做法：从待选的父分类开始沿 parent_id 一路向上回溯，撞到自身就判定成环；
+     * 同时把回溯深度限制在 {@link #MAX_PARENT_DEPTH} 层 —— 历史脏数据里可能已经存在环，
+     * 光靠「撞到 selfId」判断是死循环，深度上限是最后一道保险。
      *
      * @param parentId 父分类ID，0 表示顶级
-     * @param selfId   当前分类ID，创建时为 null
+     * @param selfId   当前分类ID，创建时为 null（新建还没有 id，不可能成环）
      */
     private void validateParent(Long parentId, Long selfId) {
         if (parentId == null || parentId <= ROOT_PARENT_ID) {
@@ -125,8 +141,28 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (parentId.equals(selfId)) {
             throw new BusinessException(ResultCode.BAD_REQUEST, "父分类不能是自己");
         }
-        if (getById(parentId) == null) {
-            throw new BusinessException(ResultCode.BAD_REQUEST, "父分类不存在");
+
+        Long cursor = parentId;
+        int depth = 0;
+        while (cursor != null && cursor > ROOT_PARENT_ID) {
+            // 回溯路径上出现自己 → 把这棵子树挂到自己下面，必然成环
+            if (cursor.equals(selfId)) {
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "父分类不能是自己的子分类，会形成循环层级");
+            }
+            if (++depth > MAX_PARENT_DEPTH) {
+                // 深度超限说明库里已有环（撞不到 selfId 也会一直转），直接拒绝写入
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        "分类层级超过 " + MAX_PARENT_DEPTH + " 层或存在循环引用，请检查父分类");
+            }
+            Category parent = getById(cursor);
+            if (parent == null) {
+                // 第一层就查不到 = 用户选了个不存在的父分类；
+                // 更深层断链 = 历史数据脏，两种都拒绝，提示文案区分开便于排查
+                throw new BusinessException(ResultCode.BAD_REQUEST,
+                        depth == 1 ? "父分类不存在" : "父分类层级数据异常，请检查上级分类");
+            }
+            cursor = parent.getParentId();
         }
     }
 

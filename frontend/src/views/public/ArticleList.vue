@@ -173,10 +173,14 @@ onMounted(async () => {
   } catch (e) {
     /* 分类加载失败不阻塞列表 */
   }
-  try {
-    tags.value = (await getTags()) || []
-  } catch (e) {
-    /* 标签加载失败不阻塞列表 */
+  // 标签属阶段 3 能力：后端 /api/v1/tags 尚未交付，开关关闭时不要请求，
+  // 否则访客每次打开首页都会收到 404 并弹出「资源不存在」。
+  if (tagFilterEnabled) {
+    try {
+      tags.value = (await getTags()) || []
+    } catch (e) {
+      /* 标签加载失败不阻塞列表 */
+    }
   }
   load()
 })

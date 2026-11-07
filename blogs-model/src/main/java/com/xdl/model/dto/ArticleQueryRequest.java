@@ -46,4 +46,12 @@ public class ArticleQueryRequest implements Serializable {
      */
     @Size(max = 50, message = "搜索关键词长度不能超过50位")
     private String keyword;
+
+    /**
+     * 标签ID，null 或 <=0 表示不按标签过滤
+     * <p>
+     * 只是一个<b>筛选条件</b>，不是可见性开关：{@code status=1} 的强制条件始终生效，
+     * 因此即便有人传了一个属于草稿的 tagId，也只会拿到空列表，不会把草稿带出来。
+     */
+    private Long tagId;
 }

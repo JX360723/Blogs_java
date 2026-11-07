@@ -9,6 +9,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 管理端文章创建/更新请求体
@@ -86,4 +87,19 @@ public class ArticleSaveRequest implements Serializable {
     @Min(value = 0, message = "文章状态值非法，只能为0（草稿）/1（已发布）/2（已下架）")
     @Max(value = 2, message = "文章状态值非法，只能为0（草稿）/1（已发布）/2（已下架）")
     private Integer status;
+
+    /**
+     * 标签ID列表
+     * <p>
+     * 三态语义（详见 ArticleServiceImpl#syncArticleTags）：
+     * <ul>
+     *   <li>字段不传 / 传 null：<b>不修改</b>已绑定标签，保留原样。
+     *       编辑页若没有动标签选择器，前端可能只提交标题等字段，此时不能把标签清空</li>
+     *   <li>传空数组 {@code []}：<b>清空</b>该文章的全部标签</li>
+     *   <li>传非空数组：全量覆盖（先删后插），库里已不存在的 tagId 会被过滤掉，
+     *       去重后超过 10 个返回 400</li>
+     * </ul>
+     * 不加 {@code @NotNull}：不传就代表「不动标签」，是合法请求。
+     */
+    private List<Long> tagIds;
 }

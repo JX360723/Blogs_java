@@ -1,6 +1,7 @@
 package com.xdl.blogsadmin.unit;
 
 import com.xdl.model.dto.ArticleQueryRequest;
+import com.xdl.model.vo.AdminArticleDetailVO;
 import com.xdl.model.vo.ArticleDetailVO;
 import com.xdl.model.vo.ArticleSummaryVO;
 import org.junit.jupiter.api.DisplayName;
@@ -67,6 +68,29 @@ class PublicApiContractTest {
 
         assertTrue(fields.contains("contentMd"),
                 "ArticleDetailVO 缺少 contentMd，访客端详情页将无法显示正文。");
+    }
+
+    @Test
+    @DisplayName("管理端详情 VO 必须带 status（编辑回填依赖，缺了会把已发布文章改回草稿）")
+    void adminDetailVoMustHaveStatusForAdminEdit() {
+        Set<String> fields = instanceFieldNames(AdminArticleDetailVO.class);
+
+        assertTrue(fields.contains("status"),
+                "AdminArticleDetailVO 缺少 status。ArticleManage.vue 保存时会把整个表单（含 status）"
+                        + "PUT 回后端，详情不回填 status 就会取默认值 0，"
+                        + "编辑一篇已发布文章会把它静默降级成草稿。");
+        assertTrue(fields.contains("tagIds"),
+                "AdminArticleDetailVO 缺少 tagIds，编辑页的标签选择器无法回填已绑定的标签。");
+    }
+
+    @Test
+    @DisplayName("公开详情 VO 仍然不能出现 status（阶段 3 拆分管理端 VO 后不得回退）")
+    void publicDetailVoMustNotExposeStatus() {
+        Set<String> fields = instanceFieldNames(ArticleDetailVO.class);
+
+        assertFalse(fields.contains("status"),
+                "公开的 ArticleDetailVO 又出现了 status。管理端需要 status 请用 AdminArticleDetailVO，"
+                        + "公开接口暴露状态既无信息量，又会诱导他人尝试 ?status=0 拉草稿。");
     }
 
     @Test
