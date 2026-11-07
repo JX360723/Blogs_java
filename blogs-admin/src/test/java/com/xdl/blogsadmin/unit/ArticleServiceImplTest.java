@@ -5,6 +5,7 @@ import com.xdl.blogscore.mapper.ArticleMapper;
 import com.xdl.blogscore.mapper.CategoryMapper;
 import com.xdl.blogscore.service.impl.ArticleServiceImpl;
 import com.xdl.model.entity.Article;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -26,7 +27,7 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("公开文章-草稿隔离")
-class ArticleServiceImplTest {
+class ArticleServiceImplTest extends ServiceTestSupport {
 
     private static final Long ARTICLE_ID = 100L;
 
@@ -38,6 +39,14 @@ class ArticleServiceImplTest {
 
     @InjectMocks
     private ArticleServiceImpl articleService;
+
+    /**
+     * 把 Mock 的 Mapper 补进 ServiceImpl 的父类字段，否则 getById 等继承方法抛 baseMapper can not be null
+     */
+    @BeforeEach
+    void setUpBaseMapper() {
+        injectBaseMapper(articleService, articleMapper);
+    }
 
     private static Article article(Integer status) {
         return Article.builder()
