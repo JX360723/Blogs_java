@@ -1,0 +1,40 @@
+# ============================================================
+# Docker 构建上下文忽略规则（两个 Dockerfile 的 context 都是仓库根目录）
+#
+# 作用有两条，缺一不可：
+#   1) 体积：不排除 target/ 与 node_modules/，每次 build 都要把几个 G 传给 daemon；
+#   2) 正确性：frontend/Dockerfile 里有 `COPY frontend/ .`，本地 node_modules
+#      是 Windows 原生二进制（esbuild 等），被覆盖进 linux 镜像后 build 直接崩。
+#
+# 注意：deploy/ 不能整目录排除 —— deploy/frontend/Dockerfile 要
+#      `COPY deploy/frontend/nginx.conf`，整目录排除会让前端镜像构建失败。
+#      这里只排除 deploy/ 下的本地密钥文件。
+# ============================================================
+
+# ---------- 构建产物 ----------
+**/target/
+frontend/dist/
+
+# ---------- 依赖 ----------
+# 镜像内会重新 npm ci，本地 node_modules 一律不带进去
+frontend/node_modules/
+
+# ---------- 版本库与编辑器 ----------
+.git/
+.idea/
+.vscode/
+
+# ---------- 文档与临时目录 ----------
+docs/
+worktrees/
+.workbuddy/
+
+# ---------- 密钥与本地配置（绝不进镜像） ----------
+.env
+**/.env
+.env.local
+**/.env.local
+deploy/.env
+
+# ---------- 日志 ----------
+**/*.log

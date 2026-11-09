@@ -1,0 +1,51 @@
+# ============================================================
+# 生产（容器 / 服务器）配置
+#
+# 激活方式：SPRING_PROFILES_ACTIVE=prod
+#   - deploy/docker-compose.yml 已把该变量注入 backend 容器
+#   - 本机验证：java -jar app.jar --spring.profiles.active=prod
+#
+# 三条硬约定：
+#   1) 本文件不写任何真实值，全部取自环境变量；缺失时启动直接失败（fail fast），
+#      而不是带着空密码连库、等到第一次查询才报一堆看不懂的认证错误；
+#   2) 生产不自动建表（sql.init.mode=never），表结构由 MySQL 容器首启执行
+#      docker-entrypoint-initdb.d/01-schema.sql 完成，变更走 down -v 重建或迁移脚本；
+#   3) 生产不打 SQL（NoLoggingImpl）。dev 用的 StdOutImpl 会把每条 SQL 与参数
+#      打进容器日志，既拖慢响应（同步写 stdout）又把文章正文泄到日志里。
+# ============================================================
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    # 形如 jdbc:mysql://mysql:3306/blogs_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    hikari:
+      # 单机 MVP 的默认值足够；库连接池打满时优先看这里而不是盲目加大
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      # 拿不到连接时快速失败，让 /actuator/health 及时 DOWN，而不是请求线程长时间挂住
+      validation-timeout: 5000
+
+  # 生产禁用启动期建表：schema.sql 由 MySQL 容器初始化阶段执行一次
+  sql:
+    init:
+      mode: never
+
+  # 当前代码尚未使用 Redis（starter 为预留）；健康检查也已在 application.yaml 关闭，
+  # 这里只保证引入缓存时能通过环境变量指定地址，不写死 localhost
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      database: ${SPRING_DATA_REDIS_DATABASE:0}
+
+mybatis-plus:
+  configuration:
+    # 生产不打 SQL 与参数（dev profile 里是 StdOutImpl）
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    root: info

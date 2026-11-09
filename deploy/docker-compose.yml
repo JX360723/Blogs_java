@@ -1,11 +1,14 @@
-# 博客系统 Docker Compose 骨架（本地/服务器整栈）
-# 用途：MySQL 8.0 + 后端(Spring Boot) + 前端(Vite 构建/Nginx) 单机整栈运行
-# 说明：本文件为**骨架草案**，后端/前端 Dockerfile 与镜像构建待 claude/codex 就位后验证。
-
-version: "3.9"
+# 博客系统 Docker Compose（本地/单机服务器整栈）
+# 用途：MySQL 8.0 + 后端(Spring Boot) + 前端(Vite 构建 / Nginx) 一条命令起全套
+#
+# 用法：
+#   cd deploy && cp .env.example .env && 改掉里面的占位密码
+#   docker compose up -d --build
+#
+# 变量全部来自 deploy/.env（compose 会自动读取同目录 .env 做插值），仓库内不存任何真实密码。
 
 services:
-  # ---------- MySQL 8.0（持久化） ----------
+  # ---------- MySQL 8.0（持久化 + 首启建表） ----------
   mysql:
     image: mysql:8.0
     container_name: blogs-mysql
@@ -23,14 +26,18 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # 可选：挂载初始化 SQL（由 claude 提供迁移脚本后启用）
-      # - ./initdb:/docker-entrypoint-initdb.d:ro
+      # 首启建表：schema.sql 全是 CREATE TABLE IF NOT EXISTS，幂等，可直接挂。
+      # 只在数据卷为空时执行一次；改了 schema 想生效必须 docker compose down -v 重建。
+      - ../blogs-admin/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
+      # 必须用 127.0.0.1 走 TCP：初始化阶段 mysqld 以 --skip-networking 启动，只有 unix socket。
+      # 若写成 -h localhost（默认走 socket），健康检查会在建表脚本还没跑完时就通过，
+      # backend 抢跑 → 表不存在 → 探活长期 DOWN。改这里前先想清楚这个竞态。
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u${MYSQL_USER}", "-p${MYSQL_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
 
   # ---------- 后端服务（Spring Boot, blogs-admin） ----------
   backend:
@@ -43,22 +50,31 @@ services:
       mysql:
         condition: service_healthy
     environment:
-      # 覆盖 application-dev.yml 中的 localhost 指向容器服务名
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false
+      # 生产 profile：不自动建表、不打 SQL、数据源全走下面的环境变量
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      # 容器内用服务名 mysql，不能沿用 application-dev.yml 的 localhost
+      # 加引号：JDBC URL 里有 :// 和 &，裸写虽然也能解析，但引起来更不容易被后续编辑改坏
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/${MYSQL_DATABASE}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false"
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      # 首个管理员初始化：admin_user 表为空时才生效；不设此变量后端只打一条 WARN 就跳过，
+      # 结果是前端永远登录不进去（且没有任何报错提示）
+      ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD}
+      TZ: Asia/Shanghai
       # 可选 Redis（MVP 不强制依赖，见 README）
       # SPRING_DATA_REDIS_HOST: redis
       # SPRING_DATA_REDIS_PORT: 6379
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     healthcheck:
+      # 依赖镜像内已安装 curl（见 deploy/backend/Dockerfile 运行阶段）
+      # /actuator/health 含 db 检查：库连不上返回 DOWN，探活即失败
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
-      interval: 30s
+      interval: 15s
       timeout: 5s
-      retries: 5
-      start_period: 40s
+      retries: 10
+      start_period: 60s
 
   # ---------- 前端（Vite 构建 → Nginx 托管 + /api 反代） ----------
   frontend:
@@ -68,7 +84,9 @@ services:
     container_name: blogs-frontend
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        # 等后端真正 healthy 再起，避免首屏 /api 请求打到还没起来的后端
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-80}:80"
 
