@@ -82,6 +82,15 @@ function parseBody(config) {
   return config.data || {}
 }
 
+// 把文章的 tagIds 展开成 TagVO 数组，对齐后端 ArticleDetailVO.tags。
+// 真实后端会过滤掉已不存在的标签，这里同样 filter(Boolean)。
+function tagsOf(article) {
+  return (article.tagIds || [])
+    .map((id) => mockTags.find((t) => t.id === id))
+    .filter(Boolean)
+    .map((t) => ({ id: t.id, name: t.name, description: t.description, createdAt: t.createdAt }))
+}
+
 // ---- 接口实现（对齐 API_CONTRACT.md MVP 主链路）----
 
 // 公开：文章列表（仅已发布；支持分页/分类/关键词/标签过滤）
@@ -112,7 +121,7 @@ route('GET', /^\/articles\/(\d+)$/, (config, [id]) => {
   const article = mockArticles.find((a) => a.id === Number(id))
   if (!article || article.status !== 1) return fail(404, '文章不存在或未发布')
   const cat = mockCategories.find((c) => c.id === article.categoryId)
-  return ok({ ...article, categoryName: cat?.name || '' })
+  return ok({ ...article, categoryName: cat?.name || '', tags: tagsOf(article) })
 })
 
 // 公开：分类列表
@@ -171,7 +180,14 @@ route('GET', /^\/admin\/articles\/(\d+)$/, (config, [id]) => {
   const article = mockArticles.find((a) => a.id === Number(id))
   if (!article) return fail(404, '文章不存在')
   const cat = mockCategories.find((c) => c.id === article.categoryId)
-  return ok({ ...article, categoryName: cat?.name || '' })
+  return ok({
+    ...article,
+    categoryName: cat?.name || '',
+    // 编辑弹窗的标签选择器绑的是 tagIds；tagIds 缺失会被前端当成「不修改」，
+    // mock 这里必须显式给出数组，否则演示时标签选择器永远是空的
+    tagIds: article.tagIds || [],
+    tags: tagsOf(article)
+  })
 })
 
 // 管理端：新建文章
@@ -299,10 +315,18 @@ route('PUT', /^\/admin\/tags\/(\d+)$/, (config, [id]) => {
 })
 
 // 管理端：删除标签
+// 真实后端在同一个事务里先删 article_tag 再删 tag（级联解绑），
+// mock 也要把文章上的 tagIds 一起清掉，否则演示时会出现「标签删了但文章还挂着」
 route('DELETE', /^\/admin\/tags\/(\d+)$/, (config, [id]) => {
-  const idx = mockTags.findIndex((t) => t.id === Number(id))
+  const tagId = Number(id)
+  const idx = mockTags.findIndex((t) => t.id === tagId)
   if (idx < 0) return fail(404, '标签不存在')
   mockTags.splice(idx, 1)
+  mockArticles.forEach((a) => {
+    if (Array.isArray(a.tagIds) && a.tagIds.includes(tagId)) {
+      a.tagIds = a.tagIds.filter((tid) => tid !== tagId)
+    }
+  })
   return ok(null)
 })
 
