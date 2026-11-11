@@ -32,6 +32,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 
 # ---------------------------------------------------------------- HTTP 客户端
 
@@ -43,7 +44,8 @@ class Client:
 
     def req(self, method, path, body=None, raw_body=None, token=Ellipsis):
         """返回 (http_status, parsed_json)。4xx/5xx 不抛异常。"""
-        url = self.base + path
+        # 关键词搜索会带中文，必须百分号编码；保留 URL 结构字符不编码
+        url = self.base + quote(path, safe="/?&=:%#[]@!$'()*,;~+")
         headers = {"Accept": "application/json"}
         data = None
         if raw_body is not None:
@@ -205,6 +207,10 @@ def main():
 
     try:
         _run_all(admin, anon, fx)
+    except Exception as e:  # 兜底：中途异常也要输出已有结果，不让报告丢失
+        print(f"\n❌ 脚本中途异常：{type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         fx.cleanup(admin)
 
