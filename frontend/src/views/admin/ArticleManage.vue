@@ -9,6 +9,7 @@
           <el-radio-button :value="2">已下架</el-radio-button>
         </el-radio-group>
         <el-button type="primary" :icon="Plus" @click="openCreate">新建文章</el-button>
+        <el-button :icon="Upload" @click="openImport">导入文档</el-button>
       </div>
 
       <el-table v-loading="loading" :data="list" stripe>
@@ -112,7 +113,22 @@
           <span v-if="!tags.length && !tagsLoading" class="tip">还没有标签，去「标签管理」新建</span>
         </el-form-item>
         <el-form-item label="封面">
-          <el-input v-model="form.coverImage" placeholder="封面图片 URL（可选）" clearable />
+          <div class="cover-field">
+            <el-input v-model="form.coverImage" placeholder="封面图片 URL，或点右侧上传" clearable />
+            <el-upload
+              action="#"
+              :show-file-list="false"
+              :auto-upload="false"
+              :accept="IMAGE_ACCEPT"
+              :on-change="onPickCover"
+            >
+              <el-button :icon="Picture" :loading="coverUploading">上传</el-button>
+            </el-upload>
+          </div>
+          <div v-if="form.coverImage" class="cover-preview">
+            <img :src="form.coverImage" alt="封面预览" />
+            <el-button link type="danger" size="small" @click="form.coverImage = ''">清除</el-button>
+          </div>
         </el-form-item>
         <el-form-item label="摘要">
           <el-input v-model="form.summary" type="textarea" :rows="2" placeholder="文章摘要（可选）" />
@@ -120,7 +136,18 @@
         <el-form-item label="正文" prop="contentMd">
           <div class="md-editor">
             <div class="md-pane">
-              <div class="pane-title">编辑（Markdown）</div>
+              <div class="pane-title">
+                <span>编辑（Markdown）</span>
+                <el-upload
+                  action="#"
+                  :show-file-list="false"
+                  :auto-upload="false"
+                  :accept="DOC_ACCEPT"
+                  :on-change="onPickContent"
+                >
+                  <el-button link type="primary" size="small">从文件导入</el-button>
+                </el-upload>
+              </div>
               <el-input
                 v-model="form.contentMd"
                 type="textarea"
@@ -152,16 +179,112 @@
         <el-button type="primary" :loading="saving" @click="onSave">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 导入 Markdown 文档：文件只在浏览器里解析，不发往服务器 -->
+    <el-dialog v-model="importVisible" title="导入 Markdown 文档" width="720px" top="8vh" destroy-on-close>
+      <el-upload
+        drag
+        action="#"
+        :show-file-list="false"
+        :auto-upload="false"
+        :accept="DOC_ACCEPT"
+        :on-change="onPickDoc"
+      >
+        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
+        <div class="el-upload__text">把 .md 文件拖到这里，或<em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">
+            支持 .md / .markdown / .txt，单个不超过 2 MB。文件只在浏览器里解析，不会上传到服务器。
+          </div>
+        </template>
+      </el-upload>
+
+      <div v-if="importParsing" class="import-loading">正在解析…</div>
+
+      <div v-else-if="importResult" class="import-result">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="文件">{{ importFileName }}</el-descriptions-item>
+          <el-descriptions-item label="标题">{{ importResult.title || '（空）' }}</el-descriptions-item>
+          <el-descriptions-item label="摘要">
+            {{ importResult.summary || '（无，保存时用正文首段兜底）' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="正文">
+            {{ importResult.stats.lines }} 行 / {{ importResult.stats.chars }} 字
+          </el-descriptions-item>
+          <el-descriptions-item label="标签">
+            <template v-if="importTagMatch.matched.length">
+              <el-tag
+                v-for="t in importTagMatch.matched"
+                :key="t"
+                size="small"
+                type="success"
+                effect="plain"
+                class="tag-chip"
+              >
+                {{ t }}
+              </el-tag>
+            </template>
+            <span v-else-if="!importTagMatch.missing.length" class="muted">无</span>
+            <template v-if="importTagMatch.missing.length">
+              <span class="muted">未匹配（需先到标签管理新建）：</span>
+              <el-tag
+                v-for="t in importTagMatch.missing"
+                :key="t"
+                size="small"
+                type="warning"
+                effect="plain"
+                class="tag-chip"
+              >
+                {{ t }}
+              </el-tag>
+            </template>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-alert
+          v-for="(w, i) in importResult.warnings"
+          :key="i"
+          :title="w"
+          type="warning"
+          :closable="false"
+          show-icon
+          class="import-warn"
+        />
+
+        <details class="import-body-preview">
+          <summary>正文预览（前 40 行）</summary>
+          <pre>{{ importPreviewBody }}</pre>
+        </details>
+      </div>
+
+      <template #footer>
+        <el-button @click="importVisible = false">取消</el-button>
+        <el-button :disabled="!importResult" :loading="importCreating" @click="importAsDraft">
+          直接存为草稿
+        </el-button>
+        <el-button type="primary" :disabled="!importResult" @click="fillFromImport">
+          填入编辑器
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Upload, Picture, UploadFilled } from '@element-plus/icons-vue'
 import { getAdminArticles, getAdminArticle, createArticle, updateArticle, deleteArticle } from '../../api/articles'
 import { getAdminCategories } from '../../api/categories'
 import { getAdminTags } from '../../api/tags'
+import { uploadFile, validateImage, IMAGE_ACCEPT } from '../../api/files'
+import {
+  DOC_ACCEPT,
+  MAX_DOC_SIZE,
+  readFileAsText,
+  parseMarkdownDoc,
+  matchTags
+} from '../../utils/docImport'
 import { renderMarkdown } from '../../utils/markdown'
 import { formatDateTime as formatDate } from '../../utils/datetime'
 
@@ -181,6 +304,14 @@ const total = ref(0)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
+
+// 文档导入相关状态
+const importVisible = ref(false)
+const importParsing = ref(false)
+const importCreating = ref(false)
+const importResult = ref(null)
+const importFileName = ref('')
+const coverUploading = ref(false)
 // tagIds 的三态语义（对应后端 ArticleSaveRequest#tagIds）：
 //   undefined = 本次不提交该字段，后端保留原绑定
 //   []        = 清空标签
@@ -206,6 +337,17 @@ const rules = {
 
 // Markdown 实时预览（自实现轻量渲染，见 utils/markdown.js）
 const renderedMd = computed(() => renderMarkdown(form.contentMd || ''))
+
+// 导入结果里的标签名 → 系统已有标签 ID
+const importTagMatch = computed(() => matchTags(importResult.value?.tagNames || [], tags.value))
+
+// 正文预览只截前 40 行：整篇塞进 <pre> 在弹窗里滚动很难看
+const importPreviewBody = computed(() => {
+  const md = importResult.value?.contentMd || ''
+  const lines = md.split(/\r?\n/)
+  const head = lines.slice(0, 40).join('\n')
+  return lines.length > 40 ? head + `\n…（共 ${lines.length} 行）` : head || '（空）'
+})
 
 function statusText(s) {
   return { 0: '草稿', 1: '已发布', 2: '已下架' }[s] || '未知'
@@ -358,6 +500,131 @@ async function onDelete(row) {
   }
 }
 
+// ---------- 文档导入 ----------
+// 全流程在浏览器里完成：读文件 → 解析 front matter / 标题 / 摘要 / 标签 → 填进编辑器。
+// 不经过后端，所以后端没上传接口时这个功能也能用。
+
+function openImport() {
+  importResult.value = null
+  importFileName.value = ''
+  importVisible.value = true
+}
+
+async function onPickDoc(uploadItem) {
+  const raw = uploadItem?.raw
+  if (!raw) return
+  if (raw.size > MAX_DOC_SIZE) {
+    ElMessage.error(`文件 ${(raw.size / 1024 / 1024).toFixed(1)} MB，超过 2 MB 上限`)
+    return
+  }
+  importParsing.value = true
+  importResult.value = null
+  importFileName.value = raw.name
+  try {
+    const text = await readFileAsText(raw)
+    importResult.value = parseMarkdownDoc(text, raw.name)
+  } catch (e) {
+    ElMessage.error('读取文件失败：' + (e.message || '未知错误'))
+  } finally {
+    importParsing.value = false
+  }
+}
+
+// 填进编辑器：先按新建文章初始化表单，再用解析结果覆盖。
+// 不直接保存——导入的内容经常需要人工看一眼标题和标签再决定发不发。
+function fillFromImport() {
+  const r = importResult.value
+  if (!r) return
+  const match = importTagMatch.value
+  importVisible.value = false
+  openCreate()
+  Object.assign(form, {
+    title: r.title,
+    summary: r.summary,
+    contentMd: r.contentMd,
+    coverImage: '',
+    isTop: r.isTop,
+    status: 0,
+    tagIds: match.tagIds
+  })
+  if (match.missing.length) {
+    ElMessage.warning(`标签「${match.missing.join('、')}」不存在，已跳过；需要的话先去标签管理新建`)
+  }
+}
+
+// 直接存草稿：批量导入时省去逐篇打开编辑器
+async function importAsDraft() {
+  const r = importResult.value
+  if (!r) return
+  if (!categories.value.length) {
+    ElMessage.warning('还没有分类，请先到「分类管理」新建一个')
+    return
+  }
+  importCreating.value = true
+  try {
+    await createArticle({
+      title: r.title,
+      summary: r.summary,
+      contentMd: r.contentMd,
+      categoryId: categories.value[0].id,
+      coverImage: '',
+      isTop: r.isTop,
+      status: 0,
+      tagIds: importTagMatch.value.tagIds
+    })
+    ElMessage.success('已存为草稿')
+    importVisible.value = false
+    load()
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    importCreating.value = false
+  }
+}
+
+// ---------- 文件上传 ----------
+
+async function onPickCover(uploadItem) {
+  const raw = uploadItem?.raw
+  if (!raw) return
+  const err = validateImage(raw)
+  if (err) {
+    ElMessage.error(err)
+    return
+  }
+  coverUploading.value = true
+  try {
+    const res = await uploadFile(raw, { scope: 'cover' })
+    form.coverImage = res.url
+    ElMessage.success('封面已上传')
+  } catch (e) {
+    /* 拦截器已提示 */
+  } finally {
+    coverUploading.value = false
+  }
+}
+
+// 编辑器里的「从文件导入」：只替换正文，已有标题和摘要不覆盖
+async function onPickContent(uploadItem) {
+  const raw = uploadItem?.raw
+  if (!raw) return
+  if (raw.size > MAX_DOC_SIZE) {
+    ElMessage.error('文件超过 2 MB 上限')
+    return
+  }
+  try {
+    const text = await readFileAsText(raw)
+    const r = parseMarkdownDoc(text, raw.name)
+    form.contentMd = r.contentMd
+    if (!form.title) form.title = r.title
+    if (!form.summary) form.summary = r.summary
+    ElMessage.success(`已导入正文（${r.stats.chars} 字）`)
+    if (r.warnings.length) ElMessage.warning(r.warnings[0])
+  } catch (e) {
+    ElMessage.error('读取文件失败')
+  }
+}
+
 onMounted(async () => {
   try {
     categories.value = (await getAdminCategories()) || []
@@ -416,6 +683,9 @@ onMounted(async () => {
   font-size: 12px;
   color: #909399;
   margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 .md-input :deep(.el-textarea__inner) {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -440,6 +710,72 @@ onMounted(async () => {
   margin-left: 10px;
   font-size: 12px;
   color: #909399;
+}
+/* ---- 封面上传 ---- */
+.cover-field {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  align-items: center;
+}
+.cover-field .el-input {
+  flex: 1;
+}
+.cover-preview {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cover-preview img {
+  max-height: 72px;
+  max-width: 240px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  object-fit: cover;
+}
+/* ---- 文档导入弹窗 ---- */
+.import-loading {
+  margin-top: 16px;
+  color: #909399;
+  font-size: 13px;
+}
+.import-result {
+  margin-top: 16px;
+}
+.tag-chip {
+  margin-right: 6px;
+}
+.muted {
+  font-size: 12px;
+  color: #909399;
+  margin-right: 6px;
+}
+.import-warn {
+  margin-top: 10px;
+}
+.import-body-preview {
+  margin-top: 12px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 8px 12px;
+  background: #fafafa;
+}
+.import-body-preview summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #606266;
+}
+.import-body-preview pre {
+  margin: 8px 0 0;
+  max-height: 220px;
+  overflow: auto;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #303133;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 /* Markdown 预览基础排版（与访客端详情页保持一致） */
 .markdown-body h1,
