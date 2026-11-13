@@ -80,7 +80,7 @@
 - **现状**：已拦截「父分类是自己」和「父分类不存在」两种情况，但 **A→B→A 这类跨层成环未做递归校验**
 - **影响**：MVP 前端不提供父子分类选择（分类表单只有 name/description/sortOrder，不传 parentId），所以当前**触发不到**；一旦开放多级编辑，成环会让分类树渲染无限递归或直接栈溢出
 - **修复方案**：更新分类前从目标 `parentId` 沿 `parent_id` 向上回溯，若回溯路径中出现当前分类 ID 则判定成环，抛 `BusinessException(ResultCode.BAD_REQUEST, "不能把分类移动到自己的子分类下")`；同时加回溯深度上限（如 10 层）防脏数据导致死循环
-- **状态**：📅 开放多级分类编辑前必须补，当前不阻塞
+- **状态**：✅ 已解决（PHASE 4）。`CategoryServiceImpl#updateCategory` 沿 `parent_id` 回溯 + 深度上限 10；PHASE 6 联调用例 #30 实测 400「父分类不能是自己的子分类，会形成循环层级」
 
 ### P1-6 管理端 401/403 缺少 MockMvc 链路级测试（后端 2026-11-04 反馈）
 
@@ -89,7 +89,7 @@
 - **为什么现在补不了**：`@WebMvcTest(controllers = AdminArticleController.class)` 依赖 Controller 类存在，而管理端 Controller 尚在后端本地开发中、未进仓库
 - **已做的替代**：新增 `PublicApiContractTest`（反射断言公开 DTO 无 status、公开 VO 无 status/updatedAt、详情 VO 带 contentMd），把最容易出安全事故的三条约定锁死
 - **待补**：管理端 Controller 合并后，补 `@WebMvcTest` + `@Import(SecurityConfig.class)` 的 401/403 断言，三条回归线为「公开不带 status」「管理端 401/403」「草稿隔离」
-- **状态**：🔓 阻塞已解除（管理端 Controller 已进 `main`），可在下一轮补 `@WebMvcTest` 的 401/403 用例；当前已由 `AdminArticleServiceImplTest` 覆盖业务分支
+- **状态**：✅ 已解决（PHASE 4）。`AdminArticleSecurityTest` 用 `@WebMvcTest` + `@ContextConfiguration` 限定 4 个 Bean，覆盖 401 / 403 / 200 三条链路，断言未进入业务层
 
 ## P2（体验 / 维护）
 
@@ -128,14 +128,51 @@
 - **位置**：`schema.sql` 有 `content_html`，后端无渲染逻辑，前端用 `contentMd` 自行渲染
 - **影响**：字段冗余；若将来加服务端渲染需回填历史数据
 - **修复**：保留字段（预留），或明确不做服务端渲染后移除
-- **状态**：📝 记录，暂不处理
+- **状态**：✅ 已解决（PHASE 4/5）。新增与更新文章时由 `MarkdownRenderer` 渲染写入 `content_html`（`ArticleServiceImpl:233,272`），且**不接收前端提交值**，保证正文与渲染结果同源；PHASE 6 联调确认公开详情 `contentHtml` 非空
 
 ### P3-3 标签模块整体未做
 
 - **位置**：`tag` 表不存在；`ArticleQueryRequest` 无 `tagId`；`SecurityConfig` 已放行 `/tags/**` 但无对应 Controller
 - **影响**：前端 `ArticleList.vue` 已把标签筛选置 `tagFilterEnabled = false` 降级隐藏
 - **修复**：表结构与接口契约已定稿，见 `docs/PHASE3_TAG_DESIGN.md`（tag / article_tag 两张表、公开 2 + 管理端 7 个接口、绑定规则）
-- **状态**：📐 设计已定稿，等管理端主链路交付后排期落地
+- **状态**：✅ 已解决（PHASE 4）。tag / article_tag 两表 + 公开与管理端接口 + `tagId` 筛选 + `tagIds` 三态语义全部落地
+
+## P3（PHASE 6 联调新增）
+
+### P3-4 阅读数无防刷 / 去重
+
+- **位置**：`ArticleServiceImpl#getPublishedDetail`，每次 GET 执行 `view_count = view_count + 1`
+- **影响**：刷新或脚本即可刷量。MVP 未设计 IP / 会话维度去重，属预期行为；并发正确性已验证（20 并发零丢失）
+- **修复方向**：公网部署前在 Redis 加「IP+文章ID」短窗口去重（如 10 分钟），或按天聚合后落库
+- **状态**：📝 记录，不阻塞
+
+### P3-5 URI 含未编码非 ASCII 字节时返回 Tomcat HTML 400
+
+- **位置**：Tomcat 连接器层，早于 Spring MVC
+- **影响**：`curl "http://host/api/v1/articles?keyword=中文"` 会得到 Tomcat 的 HTML 错误页而非 `Result` 包络。浏览器与 axios 都会自动百分号编码，真实链路触发不到
+- **修复方向**：如需彻底统一，在 Nginx 侧做 URI 规范化，或接受该行为（业界常见）
+- **状态**：📝 记录，不阻塞
+
+### P3-6 标题长度上限 120 与施工单表述（>200）不一致
+
+- **位置**：`ArticleSaveRequest#title` `@Size(max = 120)`
+- **影响**：150 字标题会被拒（400），比施工单举例的更严格。功能上更安全，但需产品确认是否放宽
+- **修复方向**：如放宽到 200，同步改 DTO 注解、前端 `maxlength` 与提示文案
+- **状态**：📝 待产品确认
+
+### P3-7 非 ADMIN 角色 403 缺真实账号链路验证
+
+- **位置**：系统仅有 admin 一个账号，无注册 / 多角色入口
+- **影响**：只能用 `@WebMvcTest` 单测锁 403，无法用真实 token 端到端验证
+- **修复方向**：将来引入多用户或普通用户角色时补
+- **状态**：📝 记录（单测已覆盖）
+
+### P3-8 前端缺浏览器自动化冒烟
+
+- **位置**：`frontend/` 无 e2e
+- **影响**：PHASE 6 的 12 项渲染类用例只能代码核对 + 人工点视
+- **修复方向**：引入 Playwright，覆盖「登录 → 发文 → 访客可见 → 下架 404」闭环与筛选/搜索/分页
+- **状态**：📝 建议排期
 
 ## 附：本轮修复清单（2026-11-03）
 

@@ -341,10 +341,10 @@ def _run_all(admin, anon, fx):
           f"tags={brief(d.get('tags'))}")
     check("详情不含 status 字段（公开侧不暴露状态）", "status" not in d, f"字段：{list(d.keys())}")
 
-    v1 = d.get("views")
+    v1 = d.get("viewCount")
     time.sleep(0.3)
     st, body = anon.req("GET", f"/api/v1/articles/{pub_id}")
-    v2 = (data_of(body) or {}).get("views")
+    v2 = (data_of(body) or {}).get("viewCount")
     check("阅读数递增", isinstance(v1, int) and isinstance(v2, int) and v2 == v1 + 1,
           f"{v1} → {v2}")
 
