@@ -6,6 +6,12 @@ spring:
     name: blogs
   profiles:
     active: dev # 激活开发环境配置 (对应 application-dev.yml)
+  servlet:
+    multipart:
+      # 图片上传闸门：单文件 5MB、整个请求 6MB（留出 multipart 协议开销的余量）
+      # 超限时由 GlobalExceptionHandler 的 MaxUploadSizeExceededException 映射为 413
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 # MyBatis-Plus 配置
 # 注意：log-impl（SQL 打印）只在 application-dev.yml 里配置，
@@ -50,3 +56,8 @@ blogs:
   cors:
     allowed-origins:
       - http://localhost:5173 # 前端 Vite 开发服务器；走 proxy 时不会触发跨域
+  upload:
+    # 图片落盘根目录：容器环境由 UPLOAD_DIR 环境变量指向挂载卷，本地默认 ./uploads
+    dir: ${UPLOAD_DIR:./uploads}
+    # 单张图片业务上限（与 multipart max-file-size 对齐，双层各管各的）
+    max-image-size: 5MB

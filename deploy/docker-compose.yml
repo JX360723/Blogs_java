@@ -61,12 +61,18 @@ services:
       # 首个管理员初始化：admin_user 表为空时才生效；不设此变量后端只打一条 WARN 就跳过，
       # 结果是前端永远登录不进去（且没有任何报错提示）
       ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD}
+      # 上传图片落盘目录：指向上面的挂载卷，本地开发时该变量缺省为 ./uploads
+      UPLOAD_DIR: /app/uploads
       TZ: Asia/Shanghai
       # 可选 Redis（MVP 不强制依赖，见 README）
       # SPRING_DATA_REDIS_HOST: redis
       # SPRING_DATA_REDIS_PORT: 6379
     ports:
       - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      # 上传图片持久化：容器重建（down/up 甚至换镜像）后已上传图片不丢。
+      # 目录由 Dockerfile 预创建并 chown app（挂载点默认属 root，非 root 进程写不进）
+      - ./data/uploads:/app/uploads
     healthcheck:
       # 依赖镜像内已安装 curl（见 deploy/backend/Dockerfile 运行阶段）
       # /actuator/health 含 db 检查：库连不上返回 DOWN，探活即失败

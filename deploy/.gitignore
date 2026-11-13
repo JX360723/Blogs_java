@@ -1,2 +1,4 @@
 # deploy 目录下本地生成的 .env 不得提交
 .env
+# 上传图片的宿主挂载目录（compose 卷 ./data/uploads），运行时数据不入库
+data/

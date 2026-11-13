@@ -95,6 +95,37 @@ docker compose start backend frontend
 
 > 备份文件里有全部文章内容，不要提交进仓库。
 
+## 6.1 上传目录（图片）
+
+文章封面与正文配图上传到后端容器内的 `/app/uploads`，由 compose 挂载到宿主机
+`deploy/data/uploads`：
+
+| 项 | 值 |
+| --- | --- |
+| 容器内路径 | `/app/uploads`（`UPLOAD_DIR` 注入，`blogs.upload.dir` 读取） |
+| 宿主机路径 | `deploy/data/uploads`（compose 卷 `./data/uploads`） |
+| 落盘规则 | `/uploads/yyyy/MM/<uuid32>.<ext>`，扩展名由文件头魔数决定 |
+| 访问方式 | 浏览器 `GET /uploads/...`，Nginx 反代给后端静态资源处理器；**免登录** |
+| 单文件上限 | 5 MB（multipart 与业务校验双层），超限 413/400 |
+| 允许格式 | PNG / JPEG / GIF / WEBP；**SVG 一律拒绝**（可内嵌脚本，存储型 XSS） |
+
+- `deploy/data/` 已在 `deploy/.gitignore` 里忽略，图片不进版本库。
+- **备份范围**：`mysqldump` 只备份数据库，**不含图片文件**。完整备份需同时打包目录：
+
+```bash
+tar -czf uploads_$(date +%Y%m%d).tar.gz -C deploy/data uploads
+# 恢复：停后端 → 解包回 deploy/data/uploads → 启动
+docker compose stop backend
+tar -xzf uploads_20261107.tar.gz -C deploy/data
+docker compose start backend
+```
+
+- **容量预估**：单张封面约 200–500 KB，正文配图约 300 KB–1 MB；按每篇 3 张图、
+  月更 10 篇估算约 **30 MB/月、360 MB/年**，个人博客一年内 1 GB 磁盘足够。
+  需要清理时按 `yyyy/MM` 目录整体归档或删除。
+- 容器重建（`up -d`、`restart`）不影响已上传图片；只有 `docker compose down -v`
+  且手动删了 `deploy/data` 才会丢。
+
 ## 7. 日志与排查
 
 ```bash
@@ -133,7 +164,8 @@ deploy/
 ├── .env.example             # 环境变量占位模板
 ├── dockerignore 说明见仓库根 .dockerignore（构建上下文 = 仓库根）
 ├── backend/Dockerfile       # Maven 多模块构建 → JRE 运行（含 curl 供 healthcheck）
+├── data/uploads/            # 上传图片的宿主机目录（git 忽略，见 6.1 节）
 └── frontend/
     ├── Dockerfile           # npm ci → vite build → Nginx
-    └── nginx.conf           # SPA 回退 + /api 反代到 backend:8080
+    └── nginx.conf           # SPA 回退 + /api、/uploads 反代到 backend:8080
 ```

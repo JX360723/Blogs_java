@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -112,6 +113,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Result<Void>> handleNotFoundException(Exception exception) {
         log.warn("资源不存在: {}", exception.getClass().getSimpleName());
         return buildResponse(ResultCode.NOT_FOUND, ResultCode.NOT_FOUND.getMessage());
+    }
+
+    /**
+     * 上传超限：spring.servlet.multipart 的 max-file-size/max-request-size 拦截后
+     * 默认会走 500 兜底，前端会误报「服务器错误」；按 HTTP 语义归为 413 Payload Too Large
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Result<Void>> handleMaxUploadSizeException(MaxUploadSizeExceededException exception) {
+        log.warn("上传内容超出大小限制: {}", exception.getMessage());
+        return ResponseEntity.status(413)
+                .body(Result.error(413, "上传内容超出大小限制"));
     }
 
     /**

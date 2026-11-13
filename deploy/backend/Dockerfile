@@ -42,6 +42,11 @@ RUN apt-get update \
 # 非 root 运行：容器被攻破时少一分横向移动的余地
 RUN groupadd -r app && useradd -r -g app -d /app app
 
+# 上传目录：compose 会把卷挂到 /app/uploads（UPLOAD_DIR=/app/uploads）。
+# 必须 mkdir + chown：挂载点默认属 root，app 用户无写权限时上传会 500，
+# 且必须在切 USER app 之前做（切换后无权再 chown）
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
+
 COPY --from=build --chown=app:app /app/blogs-admin/target/*.jar app.jar
 
 USER app
